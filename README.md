@@ -3,4 +3,5 @@
 
 Joel Sinchi
 Marc Bernardino
-Shani SuLea Hadzic
+Shani Su
+Lea Hadzic
