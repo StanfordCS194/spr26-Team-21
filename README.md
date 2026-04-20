@@ -2,4 +2,5 @@
 🌍 [Wiki Page](https://github.com/StanfordCS194/spr26-Team-21/wiki)
 
 Joel Sinchi
+Marc Bernardino
 Shani Su
