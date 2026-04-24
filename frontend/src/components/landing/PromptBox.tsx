@@ -1,5 +1,6 @@
 import { motion } from 'motion/react';
 import AttachmentMenu from '../attachment/AttachmentMenu';
+import ProfileSelector from '../profile/ProfileSelector';
 import { ArrowRight } from '../icons/Icons';
 
 interface PromptBoxProps {
@@ -24,6 +25,7 @@ export default function PromptBox({ prompt, setPrompt }: PromptBoxProps) {
       <div className="prompt-box-footer">
         <div className="prompt-meta">
           <AttachmentMenu />
+          <ProfileSelector />
         </div>
         <button className="prompt-submit" aria-label="Submit">
           <ArrowRight />

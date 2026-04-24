@@ -1,6 +1,8 @@
 import './App.css';
 import './styles/landing.css';
 import './styles/attachment.css';
+import './styles/profile.css';
+import './styles/modal.css';
 import Logo from './components/Logo';
 import Landing from './components/landing/Landing';
 
