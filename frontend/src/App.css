@@ -3,3 +3,58 @@
   display: flex;
   flex-direction: column;
 }
+
+.logo-mark {
+  font-family: ui-serif, "Charter", "Iowan Old Style", Georgia, serif;
+  color: var(--accent);
+  display: inline-flex;
+  align-items: baseline;
+  line-height: 1;
+}
+
+.logo-f {
+  font-style: italic;
+  font-weight: 500;
+}
+
+.logo-slash {
+  font-weight: 900;
+  font-style: normal;
+  margin-left: -0.02em;
+  letter-spacing: -0.05em;
+  transform: scaleX(1.4) translateY(-0.12em);
+  transform-origin: left center;
+  display: inline-block;
+}
+
+.header-logo.logo-mark {
+  font-size: 22px;
+  width: auto;
+  height: 22px;
+}
+
+.landing-title-logo.logo-mark {
+  font-size: 38px;
+  width: auto;
+  height: 36px;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  padding: 16px 24px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--sans);
+  font-weight: 400;
+  font-size: 22px;
+  color: var(--text);
+  letter-spacing: -0.5px;
+  transform: scaleY(0.9);
+  transform-origin: left center;
+}
