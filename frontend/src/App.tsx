@@ -1,5 +1,6 @@
 import './App.css';
 import './styles/landing.css';
+import './styles/attachment.css';
 import Logo from './components/Logo';
 import Landing from './components/landing/Landing';
 

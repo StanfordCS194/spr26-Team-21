@@ -1,4 +1,5 @@
 import { motion } from 'motion/react';
+import AttachmentMenu from '../attachment/AttachmentMenu';
 import { ArrowRight } from '../icons/Icons';
 
 interface PromptBoxProps {
@@ -21,7 +22,9 @@ export default function PromptBox({ prompt, setPrompt }: PromptBoxProps) {
         aria-label="Describe the dataset you want to synthesize"
       />
       <div className="prompt-box-footer">
-        <div />
+        <div className="prompt-meta">
+          <AttachmentMenu />
+        </div>
         <button className="prompt-submit" aria-label="Submit">
           <ArrowRight />
         </button>
