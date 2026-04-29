@@ -84,3 +84,12 @@ export function ArrowRight({ size = 14, strokeWidth = 2.5 }: IconProps) {
     </svg>
   );
 }
+
+
+export function Download({ size = 13, strokeWidth = 2 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...defaultProps} strokeWidth={strokeWidth}>
+      <path d="M12 4v12M6 14l6 6 6-6M4 20h16" />
+    </svg>
+  );
+}
