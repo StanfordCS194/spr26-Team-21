@@ -46,6 +46,67 @@
   color: var(--text);
 }
 
+.attach-section-label {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 0 2px 2px;
+}
+
+.attach-upload-grounding {
+  border-color: rgba(122, 154, 109, 0.4);
+}
+
+.attach-upload-grounding:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.attach-upload-grounding.drag-over {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.attach-row-grounding {
+  border-color: rgba(122, 154, 109, 0.25);
+}
+
+.attach-grounding-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.prompt-add-active {
+  color: var(--accent);
+}
+
+.prompt-add-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
 .attach-divider {
   height: 1px;
   background: var(--border);
