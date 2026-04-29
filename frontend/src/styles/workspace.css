@@ -537,6 +537,297 @@
   opacity: 0.88;
 }
 
+/* Validation report card */
+.ws-validation-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-top: 12px;
+}
+
+.ws-validation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ws-validation-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.ws-validation-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+.ws-validation-verdict-pass {
+  background: rgba(122, 154, 109, 0.15);
+  color: var(--accent);
+}
+
+.ws-validation-verdict-warn {
+  background: rgba(196, 146, 90, 0.15);
+  color: #c4925a;
+}
+
+.ws-validation-verdict-fail {
+  background: rgba(196, 106, 90, 0.15);
+  color: #c46a5a;
+}
+
+/* Edge case coverage banner */
+.ws-coverage-banner {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(122, 154, 109, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ws-coverage-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ws-coverage-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.ws-coverage-pct {
+  font-family: var(--mono);
+  font-size: 18px;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.ws-coverage-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+
+.ws-coverage-bar-track {
+  height: 5px;
+  background: var(--bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.ws-coverage-bar {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 0.6s ease;
+}
+
+.ws-coverage-count {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* Metrics row */
+.ws-validation-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid var(--border);
+}
+
+.ws-validation-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+  border-right: 1px solid var(--border);
+}
+
+.ws-validation-metric:last-child {
+  border-right: none;
+}
+
+.ws-validation-metric-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.ws-validation-bar-track {
+  height: 5px;
+  background: var(--bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.ws-validation-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s ease;
+}
+
+.ws-validation-bar-pass { background: var(--accent); }
+.ws-validation-bar-warn { background: #c4925a; }
+.ws-validation-bar-fail { background: #c46a5a; }
+
+.ws-validation-metric-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ws-validation-score {
+  font-size: 22px;
+  font-family: var(--mono);
+  line-height: 1;
+}
+
+.ws-validation-score-pass { color: var(--accent); }
+.ws-validation-score-warn { color: #c4925a; }
+.ws-validation-score-fail { color: #c46a5a; }
+
+.ws-validation-badge {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.ws-validation-badge-pass { background: rgba(122, 154, 109, 0.12); color: var(--accent); }
+.ws-validation-badge-warn { background: rgba(196, 146, 90, 0.12); color: #c4925a; }
+.ws-validation-badge-fail { background: rgba(196, 106, 90, 0.12); color: #c46a5a; }
+
+/* Column fidelity section */
+.ws-validation-section-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 12px 18px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  background: transparent;
+  text-align: left;
+}
+
+.ws-validation-section-btn:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+.ws-validation-cols {
+  border-bottom: 1px solid var(--border);
+}
+
+.ws-validation-col-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 52px 20px auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ws-validation-col-row:last-child {
+  border-bottom: none;
+}
+
+.ws-validation-col-name {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.ws-validation-mini-track {
+  height: 4px;
+  background: var(--bg);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.ws-validation-mini-bar {
+  height: 100%;
+  border-radius: 2px;
+}
+
+.ws-validation-col-pct {
+  font-family: var(--mono);
+  font-size: 12px;
+  text-align: right;
+}
+
+.ws-validation-col-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ws-validation-col-icon-pass { color: var(--accent); }
+.ws-validation-col-icon-warn { color: #c4925a; }
+.ws-validation-col-icon-fail { color: #c46a5a; }
+
+.ws-validation-col-note {
+  font-size: 11px;
+  color: #c4925a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Insights */
+.ws-validation-insights {
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ws-validation-insights-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
+.ws-validation-insight {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.ws-validation-insight-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex-shrink: 0;
+  margin-top: 6px;
+}
+
 /* Follow-up input */
 .ws-followup {
   display: flex;

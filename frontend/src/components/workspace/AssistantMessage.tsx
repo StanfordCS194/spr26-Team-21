@@ -2,11 +2,13 @@ import { useState } from 'react';
 import Logo from '../Logo';
 import AgentTaskList from './AgentTaskList';
 import SchemaCard from './SchemaCard';
+import ValidationReport from './ValidationReport';
 import { Download } from '../icons/Icons';
 import type { WorkspaceMessage } from '../../constants/mockWorkspace';
+import { VALIDATION_REPORT } from '../../constants/mockWorkspace';
 
 type Props = Extract<WorkspaceMessage, { role: 'assistant' }>;
-type ApprovalState = 'idle' | 'generating' | 'complete';
+type ApprovalState = 'idle' | 'generating' | 'validating' | 'complete';
 
 const wait = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
 
@@ -16,6 +18,8 @@ export default function AssistantMessage({ loading, plan, planText, agents, sche
   const handleApprove = async () => {
     setApproval('generating');
     await wait(2200);
+    setApproval('validating');
+    await wait(1600);
     setApproval('complete');
   };
 
@@ -65,17 +69,26 @@ export default function AssistantMessage({ loading, plan, planText, agents, sche
                     Generating dataset…
                   </div>
                 )}
-                {approval === 'complete' && (
-                  <div className="ws-download-card">
-                    <div className="ws-download-info">
-                      <span className="ws-download-filename">diabetic_cohort.csv</span>
-                      <span className="ws-download-meta">10,000 rows · CSV · 2.4 MB</span>
-                    </div>
-                    <button className="ws-download-btn">
-                      <Download size={13} />
-                      Download
-                    </button>
+                {approval === 'validating' && (
+                  <div className="ws-generating">
+                    <span className="spinner" />
+                    Running validation checks…
                   </div>
+                )}
+                {approval === 'complete' && (
+                  <>
+                    <div className="ws-download-card">
+                      <div className="ws-download-info">
+                        <span className="ws-download-filename">diabetic_cohort.csv</span>
+                        <span className="ws-download-meta">10,000 rows · CSV · 2.4 MB</span>
+                      </div>
+                      <button className="ws-download-btn">
+                        <Download size={13} />
+                        Download
+                      </button>
+                    </div>
+                    <ValidationReport report={VALIDATION_REPORT} />
+                  </>
                 )}
               </div>
             )}

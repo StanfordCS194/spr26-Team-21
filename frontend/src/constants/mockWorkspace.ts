@@ -1,3 +1,63 @@
+export type ValidationStatus = 'pass' | 'warn' | 'fail';
+
+export interface ValidationMetric {
+  label: string;
+  score: number;
+  status: ValidationStatus;
+}
+
+export interface ValidationColumnResult {
+  column: string;
+  fidelity: number;
+  status: ValidationStatus;
+  note?: string;
+}
+
+export interface EdgeCaseCoverage {
+  requested: number;
+  generated: number;
+  description: string;
+  coveragePct: number;
+}
+
+export interface ValidationReport {
+  verdict: string;
+  verdictStatus: ValidationStatus;
+  edgeCaseCoverage?: EdgeCaseCoverage;
+  metrics: ValidationMetric[];
+  columns: ValidationColumnResult[];
+  insights: string[];
+}
+
+export const VALIDATION_REPORT: ValidationReport = {
+  verdict: 'Ready for fine-tuning',
+  verdictStatus: 'pass',
+  edgeCaseCoverage: {
+    requested: 500,
+    generated: 482,
+    description: 'HbA1c > 12 + 3+ comorbidities',
+    coveragePct: 96.4,
+  },
+  metrics: [
+    { label: 'Realism', score: 94, status: 'pass' },
+    { label: 'Diversity', score: 87, status: 'pass' },
+    { label: 'Safety / PII', score: 100, status: 'pass' },
+  ],
+  columns: [
+    { column: 'patient_id', fidelity: 100, status: 'pass' },
+    { column: 'age', fidelity: 96, status: 'pass' },
+    { column: 'sex', fidelity: 99, status: 'pass' },
+    { column: 'hba1c', fidelity: 83, status: 'warn', note: 'Mild tail compression vs. source' },
+    { column: 'comorbidities', fidelity: 91, status: 'pass' },
+    { column: 'last_visit', fidelity: 88, status: 'pass' },
+  ],
+  insights: [
+    'hba1c shows mild tail compression — consider increasing variance in generation params',
+    'No PII detected across all 10,000 rows',
+    'Inter-column correlations preserved within 4% of source statistics',
+  ],
+};
+
 export interface SchemaRow {
   column: string;
   type: string;
