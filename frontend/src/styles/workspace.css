@@ -1,0 +1,602 @@
+/* Workspace layout */
+.workspace {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+  max-height: 100vh;
+}
+
+/* Sidebar */
+.ws-sidebar {
+  border-right: 1px solid var(--border);
+  padding: 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--bg);
+}
+
+.ws-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--sans);
+  font-size: 22px;
+  color: var(--text);
+  letter-spacing: -0.5px;
+  transform: scaleY(0.9);
+  transform-origin: left center;
+  margin-bottom: 2px;
+}
+
+.ws-new-project {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 14px;
+  text-align: left;
+  background: var(--surface);
+}
+
+.ws-new-project:hover {
+  background: var(--surface-hover);
+  border-color: var(--text-dim);
+}
+
+.ws-sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.ws-sidebar-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 0 8px 4px;
+}
+
+.ws-source-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ws-source-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.ws-source-item:hover {
+  background: var(--surface-hover);
+}
+
+.ws-source-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.ws-source-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ws-source-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.ws-add-source {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--accent);
+  border-radius: 8px;
+  margin-top: 4px;
+}
+
+.ws-add-source:hover {
+  background: var(--surface-hover);
+}
+
+/* Main panel */
+.ws-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+}
+
+
+/* Transcript */
+.ws-transcript {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.ws-msg {
+  display: flex;
+  gap: 16px;
+  padding: 0 32px;
+  max-width: 880px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.ws-msg-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  background: var(--surface);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.ws-avatar-assistant {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+}
+
+.ws-avatar-assistant .logo-mark {
+  font-size: 16px;
+  height: 16px;
+}
+
+.ws-msg-body {
+  flex: 1;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text);
+  padding-top: 4px;
+  min-width: 0;
+}
+
+.ws-msg-text {
+  margin: 0 0 16px;
+}
+
+/* Assistant typing indicator */
+.ws-typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 0;
+}
+
+.ws-typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: ws-typing-pulse 1.2s ease-in-out infinite;
+}
+
+.ws-typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.ws-typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes ws-typing-pulse {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-2px); }
+}
+
+/* Agent task card */
+.ws-agent-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.ws-agent-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  width: 100%;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ws-agent-card-header:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+.ws-agent-card-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.ws-agent-card-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ws-agent-status-done {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.ws-agent-status-running {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.ws-chevron {
+  display: inline-flex;
+  color: var(--text-dim);
+  transition: transform 0.18s ease;
+}
+
+.ws-chevron-open {
+  transform: rotate(180deg);
+}
+
+.ws-agent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ws-agent-row:last-child {
+  border-bottom: none;
+}
+
+.ws-agent-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+
+.ws-agent-queued-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-dim);
+  display: block;
+}
+
+.ws-agent-spinner {
+  width: 12px !important;
+  height: 12px !important;
+}
+
+.ws-agent-row-running .ws-agent-icon,
+.ws-agent-row-done .ws-agent-icon {
+  color: var(--accent);
+}
+
+.ws-agent-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ws-agent-name {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.ws-agent-row-running .ws-agent-name,
+.ws-agent-row-done .ws-agent-name {
+  color: var(--text);
+}
+
+.ws-agent-detail {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.ws-agent-row-running .ws-agent-detail {
+  color: var(--text-muted);
+}
+
+/* Schema card */
+.ws-schema-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.ws-schema-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ws-schema-title {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.ws-schema-tag {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
+.ws-schema-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.ws-schema-row {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1.7fr 1.2fr;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
+  font-size: 13px;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+
+.ws-schema-row:last-child {
+  border-bottom: none;
+}
+
+.ws-schema-row-head {
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ws-schema-col-name {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.ws-schema-col-type {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.ws-schema-col-dist {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.ws-schema-col-sample {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Execution plan steps */
+.ws-plan-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.ws-plan-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.ws-plan-step-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.ws-plan-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ws-plan-step-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.ws-plan-step-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* Approve / generate / download */
+.ws-approve-row {
+  margin-top: 16px;
+}
+
+.ws-approve-btn {
+  padding: 9px 18px;
+  background: var(--accent);
+  color: white;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ws-approve-btn:hover {
+  opacity: 0.88;
+}
+
+.ws-generating {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 2px 0;
+}
+
+.ws-download-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.ws-download-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ws-download-filename {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.ws-download-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.ws-download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--accent);
+  color: white;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ws-download-btn:hover {
+  opacity: 0.88;
+}
+
+/* Follow-up input */
+.ws-followup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px auto 24px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  width: calc(100% - 64px);
+  max-width: 880px;
+}
+
+.ws-followup:focus-within {
+  border-color: var(--text-dim);
+}
+
+.ws-followup-add {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.ws-followup-add:hover {
+  background: var(--surface-hover);
+}
+
+.ws-followup-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 6px 0;
+  min-height: 28px;
+}
+
+.ws-followup-input::placeholder {
+  color: var(--text-dim);
+}
+
+.ws-followup-submit {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ws-followup-submit:hover {
+  opacity: 0.9;
+}
