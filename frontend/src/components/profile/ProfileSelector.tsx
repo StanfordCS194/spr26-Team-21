@@ -1,6 +1,6 @@
-import { useCallback, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useCallback, useRef, useState, type Dispatch, type KeyboardEvent as ReactKeyboardEvent, type SetStateAction } from 'react';
 import useClickOutside from '../../hooks/useClickOutside';
-import { INITIAL_PROFILES, getLogoSrc, type Integration, type Profile } from '../../constants/integrations';
+import { getLogoSrc, type Integration, type Profile } from '../../constants/integrations';
 import { ChevronDown, Check, Plus, Settings } from '../icons/Icons';
 import ProfileModal from './ProfileModal';
 
@@ -11,9 +11,14 @@ interface ModalState {
   profile?: Profile;
 }
 
-export default function ProfileSelector() {
-  const [profiles, setProfiles] = useState<Profile[]>(INITIAL_PROFILES);
-  const [selectedId, setSelectedId] = useState('default');
+interface ProfileSelectorProps {
+  profiles: Profile[];
+  setProfiles: Dispatch<SetStateAction<Profile[]>>;
+  selectedId: string;
+  setSelectedId: Dispatch<SetStateAction<string>>;
+}
+
+export default function ProfileSelector({ profiles, setProfiles, selectedId, setSelectedId }: ProfileSelectorProps) {
   const [open, setOpen] = useState(false);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [menuIndex, setMenuIndex] = useState(-1);

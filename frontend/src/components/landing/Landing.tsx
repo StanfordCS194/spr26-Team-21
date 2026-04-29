@@ -1,24 +1,28 @@
-import { useState } from 'react';
-import { motion } from 'motion/react';
+import type { Dispatch, SetStateAction } from 'react';
 import Logo from '../Logo';
 import PromptBox from './PromptBox';
+import type { Profile } from '../../constants/integrations';
 
-export default function Landing() {
-  const [prompt, setPrompt] = useState('');
+interface LandingProps {
+  prompt: string;
+  setPrompt: (value: string) => void;
+  onSubmit: () => void;
+  submitting: boolean;
+  profiles: Profile[];
+  setProfiles: Dispatch<SetStateAction<Profile[]>>;
+  selectedId: string;
+  setSelectedId: Dispatch<SetStateAction<string>>;
+}
 
+export default function Landing(props: LandingProps) {
   return (
     <div className="landing">
-      <motion.h1
-        className="landing-title"
-        initial={{ opacity: 0, filter: 'blur(12px)', y: 8 }}
-        animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
-        transition={{ duration: 0.7, ease: 'easeOut' }}
-      >
+      <h1 className="landing-title">
         <Logo className="landing-title-logo" />
         What should we synthesize?
-      </motion.h1>
+      </h1>
 
-      <PromptBox prompt={prompt} setPrompt={setPrompt} />
+      <PromptBox {...props} />
     </div>
   );
 }
