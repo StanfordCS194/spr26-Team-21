@@ -84,6 +84,22 @@ export interface ExecutionPlan {
   steps: PlanStep[];
 }
 
+export type ApprovalState = 'idle' | 'generating' | 'validating' | 'complete';
+
+export interface ClarifyingQuestion {
+  id: string;
+  question: string;
+  answer?: string;
+}
+
+export interface GenerationSpec {
+  row_count: number;
+  format: 'csv' | 'jsonl' | 'parquet';
+  labels: string[];
+  edge_cases: string[];
+  constraints: string[];
+}
+
 export type WorkspaceMessage =
   | { id: string; role: 'user'; text: string }
   | {
@@ -94,6 +110,13 @@ export type WorkspaceMessage =
       planText?: string;
       agents?: AgentTask[];
       schema?: SchemaRow[];
+      initialApproval?: ApprovalState;
+      sourceStats?: Record<string, Record<string, unknown>>;
+      originalPrompt?: string;
+      clarifyingQuestions?: ClarifyingQuestion[];
+      generationSpec?: GenerationSpec;
+      schemaSource?: 'llm' | 'upload';
+      modelId?: string | null;
     };
 
 export const SCHEMA_TAG = 'APERTURE V1 · CLINICAL';
@@ -158,3 +181,22 @@ export function buildAgents(sourceNames: string[]): AgentTask[] {
     },
   ];
 }
+
+const DEMO_SOURCES = ['Amazon S3', 'PostgreSQL', 'MongoDB'];
+
+export const DEMO_MESSAGES: WorkspaceMessage[] = [
+  {
+    id: 'demo-user-1',
+    role: 'user',
+    text: 'Generate 10,000 diabetic cohort records grounded in our clinical EHR data — include edge cases for HbA1c > 12 with 3+ comorbidities',
+  },
+  {
+    id: 'demo-assistant-1',
+    role: 'assistant',
+    loading: false,
+    plan: buildExecutionPlan(DEMO_SOURCES),
+    agents: buildAgents(DEMO_SOURCES).map((a) => ({ ...a, status: 'done' as AgentStatus })),
+    schema: SCHEMA_ROWS,
+    initialApproval: 'complete',
+  },
+];

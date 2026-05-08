@@ -2,13 +2,16 @@ import type { SchemaRow } from '../../constants/mockWorkspace';
 
 interface SchemaCardProps {
   rows: SchemaRow[];
+  source?: 'llm' | 'upload';
 }
 
-export default function SchemaCard({ rows }: SchemaCardProps) {
+export default function SchemaCard({ rows, source }: SchemaCardProps) {
+  const sourceLabel = source === 'llm' ? 'AI-inferred' : source === 'upload' ? 'File-grounded' : null;
   return (
     <div className="ws-schema-card">
       <div className="ws-schema-header">
         <span className="ws-schema-title">Inferred schema · {rows.length} columns</span>
+        {sourceLabel && <span className="ws-schema-source-badge">{sourceLabel}</span>}
       </div>
       <div className="ws-schema-table">
         <div className="ws-schema-row ws-schema-row-head">

@@ -1,0 +1,140 @@
+export interface SchemaColumn {
+  column: string;
+  type: string;
+  distribution: string;
+  sample: string;
+  null_pct?: number;
+}
+
+export type SourceStats = Record<string, Record<string, unknown>>;
+
+export interface InferSchemaResponse {
+  columns: SchemaColumn[];
+  stats: SourceStats;
+  source_rows: number;
+  model_id?: string | null;
+  error?: string;
+}
+
+export interface ValidationMetric {
+  label: string;
+  score: number;
+  status: 'pass' | 'warn' | 'fail';
+}
+
+export interface ValidationColumnResult {
+  column: string;
+  fidelity: number;
+  status: 'pass' | 'warn' | 'fail';
+  note?: string;
+}
+
+export interface ValidationReportData {
+  verdict: string;
+  verdictStatus: 'pass' | 'warn' | 'fail';
+  metrics: ValidationMetric[];
+  columns: ValidationColumnResult[];
+  insights: string[];
+}
+
+export interface GenerateResponse {
+  session_id: string;
+  row_count: number;
+  file_size_kb: number;
+  format?: string;
+  filename?: string;
+  validation: ValidationReportData;
+}
+
+export interface ClarifyingQuestion {
+  id: string;
+  question: string;
+}
+
+export interface GenerationSpec {
+  row_count: number;
+  format: 'csv' | 'jsonl' | 'parquet';
+  labels: string[];
+  edge_cases: string[];
+  constraints: string[];
+}
+
+export interface PlanResponse {
+  schema: SchemaColumn[];
+  generation_spec: GenerationSpec;
+  generation_plan: {
+    intro: string;
+    steps: Array<{ title: string; description: string }>;
+  };
+  clarifying_questions: ClarifyingQuestion[];
+}
+
+const BASE = '/api';
+
+export async function inferSchema(files: File[]): Promise<InferSchemaResponse> {
+  const form = new FormData();
+  files.forEach((f) => form.append('files', f));
+  const res = await fetch(`${BASE}/infer-schema`, { method: 'POST', body: form });
+  if (!res.ok) throw new Error(`Schema inference failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function planFromPrompt(prompt: string): Promise<PlanResponse> {
+  const res = await fetch(`${BASE}/plan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt }),
+  });
+  if (!res.ok) throw new Error(`Plan generation failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function previewDataset(
+  schemaColumns: SchemaColumn[],
+  sourceStats: SourceStats,
+  modelId?: string | null,
+): Promise<{ rows: Record<string, unknown>[] }> {
+  const res = await fetch(`${BASE}/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      schema_columns: schemaColumns,
+      source_stats: sourceStats,
+      row_count: 10,
+      prompt: '',
+      model_id: modelId ?? null,
+    }),
+  });
+  if (!res.ok) throw new Error(`Preview failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function generate(
+  schemaColumns: SchemaColumn[],
+  sourceStats: SourceStats,
+  rowCount: number,
+  prompt: string,
+  format: 'csv' | 'jsonl' | 'parquet' = 'csv',
+  edgeCases: string[] = [],
+  modelId?: string | null,
+): Promise<GenerateResponse> {
+  const res = await fetch(`${BASE}/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      schema_columns: schemaColumns,
+      source_stats: sourceStats,
+      row_count: rowCount,
+      prompt,
+      format,
+      edge_cases: edgeCases,
+      model_id: modelId ?? null,
+    }),
+  });
+  if (!res.ok) throw new Error(`Generation failed: ${res.statusText}`);
+  return res.json();
+}
+
+export function downloadUrl(sessionId: string): string {
+  return `${BASE}/download/${sessionId}`;
+}

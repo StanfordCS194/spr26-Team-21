@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, ChevronDown } from '../icons/Icons';
 import type { ValidationReport as ValidationReportType } from '../../constants/mockWorkspace';
 
@@ -19,6 +19,12 @@ function WarnIcon() {
 
 export default function ValidationReport({ report }: Props) {
   const [colsExpanded, setColsExpanded] = useState(true);
+  const [animated, setAnimated] = useState(false);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setAnimated(true), 60);
+    return () => window.clearTimeout(t);
+  }, []);
 
   return (
     <div className="ws-validation-card">
@@ -41,7 +47,7 @@ export default function ValidationReport({ report }: Props) {
           <div className="ws-coverage-bar-track">
             <div
               className="ws-coverage-bar"
-              style={{ width: `${report.edgeCaseCoverage.coveragePct}%` }}
+              style={{ width: animated ? `${report.edgeCaseCoverage.coveragePct}%` : '0%' }}
             />
           </div>
           <div className="ws-coverage-count">
@@ -58,7 +64,7 @@ export default function ValidationReport({ report }: Props) {
             <div className="ws-validation-bar-track">
               <div
                 className={`ws-validation-bar ws-validation-bar-${m.status}`}
-                style={{ width: `${m.score}%` }}
+                style={{ width: animated ? `${m.score}%` : '0%' }}
               />
             </div>
             <div className="ws-validation-metric-footer">
@@ -92,7 +98,7 @@ export default function ValidationReport({ report }: Props) {
               <div className="ws-validation-mini-track">
                 <div
                   className={`ws-validation-mini-bar ws-validation-bar-${col.status}`}
-                  style={{ width: `${col.fidelity}%` }}
+                  style={{ width: animated ? `${col.fidelity}%` : '0%' }}
                 />
               </div>
               <span className={`ws-validation-col-pct ws-validation-score-${col.status}`}>

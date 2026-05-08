@@ -6,6 +6,12 @@ interface AttachedFile {
   id: string;
   name: string;
   size: number;
+  file: File;
+}
+
+interface AttachmentMenuProps {
+  onGroundingChange?: (files: File[]) => void;
+  profileSummary?: { columns: number; sourceRows: number } | null;
 }
 
 function formatSize(bytes: number): string {
@@ -14,7 +20,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function AttachmentMenu() {
+export default function AttachmentMenu({ onGroundingChange, profileSummary }: AttachmentMenuProps) {
   const [open, setOpen] = useState(false);
   const [groundingFiles, setGroundingFiles] = useState<AttachedFile[]>([]);
   const [contextFiles, setContextFiles] = useState<AttachedFile[]>([]);
@@ -41,7 +47,14 @@ export default function AttachmentMenu() {
       id: `${f.name}-${f.size}-${Date.now()}`,
       name: f.name,
       size: f.size,
+      file: f,
     }));
+
+  const addGrounding = (list: FileList) => {
+    const next = [...groundingFiles, ...makeFiles(list)];
+    setGroundingFiles(next);
+    onGroundingChange?.(next.map((f) => f.file));
+  };
 
   const totalAttached = groundingFiles.length + contextFiles.length;
 
@@ -73,8 +86,7 @@ export default function AttachmentMenu() {
             onDrop={(e) => {
               e.preventDefault();
               setDragOverGrounding(false);
-              if (e.dataTransfer.files?.length)
-                setGroundingFiles((p) => [...p, ...makeFiles(e.dataTransfer.files)]);
+              if (e.dataTransfer.files?.length) addGrounding(e.dataTransfer.files);
             }}
           >
             <Upload size={14} />
@@ -87,8 +99,7 @@ export default function AttachmentMenu() {
             hidden
             accept=".csv,.xlsx,.xls,.parquet"
             onChange={(e) => {
-              if (e.target.files?.length)
-                setGroundingFiles((p) => [...p, ...makeFiles(e.target.files!)]);
+              if (e.target.files?.length) addGrounding(e.target.files);
               e.target.value = '';
             }}
           />
@@ -106,6 +117,17 @@ export default function AttachmentMenu() {
                   <span className="attach-size">{formatSize(f.size)}</span>
                 </div>
               ))}
+              {profileSummary && (
+                <div className="attach-profile-banner">
+                  <Check size={10} strokeWidth={2.5} />
+                  <span>
+                    Profiled · <strong>{profileSummary.columns}</strong> columns
+                    {profileSummary.sourceRows > 0 && (
+                      <> · <strong>{profileSummary.sourceRows.toLocaleString()}</strong> source rows</>
+                    )}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 

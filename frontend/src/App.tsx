@@ -15,7 +15,15 @@ import {
   SCHEMA_ROWS,
   type AgentStatus,
   type WorkspaceMessage,
+  type ClarifyingQuestion,
+  type GenerationSpec,
 } from './constants/mockWorkspace';
+import {
+  inferSchema,
+  planFromPrompt,
+  type SchemaColumn,
+  type SourceStats,
+} from './api/client';
 
 const wait = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
 
@@ -26,26 +34,56 @@ function App() {
   const [profiles, setProfiles] = useState<Profile[]>(INITIAL_PROFILES);
   const [selectedId, setSelectedId] = useState('default');
   const [messages, setMessages] = useState<WorkspaceMessage[]>([]);
+  const [groundingFiles, setGroundingFiles] = useState<File[]>([]);
+  const [landingSchema, setLandingSchema] = useState<SchemaColumn[] | null>(null);
+  const [landingStats, setLandingStats] = useState<SourceStats | null>(null);
+  const [landingSourceRows, setLandingSourceRows] = useState<number>(0);
+  const [landingModelId, setLandingModelId] = useState<string | null>(null);
+  const [schemaInferring, setSchemaInferring] = useState(false);
 
   const activeProfile = profiles.find((p) => p.id === selectedId) ?? profiles[0];
+
+  const handleGroundingFilesChange = async (files: File[]) => {
+    setGroundingFiles(files);
+    if (files.length === 0) {
+      setLandingSchema(null);
+      setLandingStats(null);
+      setLandingSourceRows(0);
+      setLandingModelId(null);
+      return;
+    }
+    setSchemaInferring(true);
+    try {
+      const result = await inferSchema(files);
+      if (!result.error) {
+        setLandingSchema(result.columns);
+        setLandingStats(result.stats);
+        setLandingSourceRows(result.source_rows);
+        setLandingModelId(result.model_id ?? null);
+      }
+    } catch {
+      setLandingSchema(null);
+      setLandingStats(null);
+      setLandingModelId(null);
+    } finally {
+      setSchemaInferring(false);
+    }
+  };
 
   const handleLandingSubmit = async () => {
     const trimmed = prompt.trim();
     if (!trimmed || submitting) return;
-
     setSubmitting(true);
-    await wait(800);
 
     const sourceNames = activeProfile.integrations
       .filter((i) => i.enabled)
       .map((i) => i.name);
     const msgId = 'm-assistant-1';
     const initialAgents = buildAgents(sourceNames);
-    const plan = buildExecutionPlan(sourceNames);
 
     const patch = (p: Partial<Extract<WorkspaceMessage, { role: 'assistant' }>>) =>
       setMessages((prev) =>
-        prev.map((m) => (m.id === msgId && m.role === 'assistant' ? { ...m, ...p } : m))
+        prev.map((m) => (m.id === msgId && m.role === 'assistant' ? { ...m, ...p } : m)),
       );
 
     const setAgentStatus = (id: string, status: AgentStatus) =>
@@ -65,8 +103,51 @@ function App() {
     setView('workspace');
     setSubmitting(false);
 
-    await wait(700);
-    patch({ loading: false, plan, agents: initialAgents });
+    // Fetch plan / schema from the appropriate source
+    let schema: SchemaColumn[] | null = null;
+    let stats: SourceStats | null = null;
+    let clarifyingQuestions: ClarifyingQuestion[] = [];
+    let generationSpec: GenerationSpec | undefined;
+    let schemaSource: 'llm' | 'upload' | undefined;
+    let modelId: string | null = null;
+    let planData = buildExecutionPlan(sourceNames);
+
+    if (groundingFiles.length > 0) {
+      // Use already-inferred schema if available, otherwise infer now
+      const result =
+        landingSchema && landingStats
+          ? { columns: landingSchema, stats: landingStats, source_rows: landingSourceRows, model_id: landingModelId }
+          : await inferSchema(groundingFiles).catch(() => null);
+
+      if (result) {
+        schema = result.columns;
+        stats = result.stats;
+        modelId = result.model_id ?? null;
+        schemaSource = 'upload';
+        generationSpec = {
+          row_count: 10_000,
+          format: 'csv',
+          labels: [],
+          edge_cases: [],
+          constraints: [],
+        };
+      }
+    } else {
+      // No grounding files — use the Prompt-to-Action agent
+      const result = await planFromPrompt(trimmed).catch(() => null);
+      if (result) {
+        schema = result.schema;
+        clarifyingQuestions = result.clarifying_questions ?? [];
+        generationSpec = result.generation_spec;
+        schemaSource = 'llm';
+        planData = {
+          intro: result.generation_plan.intro,
+          steps: result.generation_plan.steps,
+        };
+      }
+    }
+
+    patch({ loading: false, plan: planData, agents: initialAgents });
 
     await wait(500);
     setAgentStatus('a1', 'running');
@@ -75,9 +156,16 @@ function App() {
     await wait(1100);
     setAgentStatus('a3', 'running');
     await wait(1100);
+
     patch({
       agents: initialAgents.map((a) => ({ ...a, status: 'done' })),
-      schema: SCHEMA_ROWS,
+      schema: schema ?? SCHEMA_ROWS,
+      sourceStats: stats ?? undefined,
+      originalPrompt: trimmed,
+      clarifyingQuestions: clarifyingQuestions.length > 0 ? clarifyingQuestions : undefined,
+      generationSpec,
+      schemaSource,
+      modelId,
     });
   };
 
@@ -99,16 +187,26 @@ function App() {
       prev.map((m) =>
         m.id === assistantId && m.role === 'assistant'
           ? { ...m, loading: false, planText: 'Updated. I applied your refinements to the schema.' }
-          : m
-      )
+          : m,
+      ),
     );
   };
 
   const handleNewProject = () => {
     setMessages([]);
     setPrompt('');
+    setGroundingFiles([]);
+    setLandingSchema(null);
+    setLandingStats(null);
+    setLandingSourceRows(0);
+    setLandingModelId(null);
     setView('landing');
   };
+
+  const profileSummary =
+    landingSchema && landingSchema.length > 0
+      ? { columns: landingSchema.length, sourceRows: landingSourceRows }
+      : null;
 
   return (
     <div className="app">
@@ -131,6 +229,11 @@ function App() {
           setProfiles={setProfiles}
           selectedId={selectedId}
           setSelectedId={setSelectedId}
+          groundingFiles={groundingFiles}
+          onGroundingFilesChange={handleGroundingFilesChange}
+          inferredSchema={landingSchema}
+          schemaInferring={schemaInferring}
+          profileSummary={profileSummary}
         />
       ) : (
         <Workspace
