@@ -153,6 +153,22 @@
   color: var(--text-dim);
 }
 
+.attach-profile-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(122, 154, 109, 0.1);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--accent);
+  margin-top: 4px;
+}
+
+.attach-profile-banner strong {
+  font-weight: 600;
+}
+
 @media (max-width: 480px) {
   .attach-menu {
     width: 280px;

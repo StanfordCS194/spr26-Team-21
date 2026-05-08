@@ -13,6 +13,8 @@ interface PromptBoxProps {
   setProfiles: Dispatch<SetStateAction<Profile[]>>;
   selectedId: string;
   setSelectedId: Dispatch<SetStateAction<string>>;
+  onGroundingFilesChange?: (files: File[]) => void;
+  profileSummary?: { columns: number; sourceRows: number } | null;
 }
 
 export default function PromptBox({
@@ -24,6 +26,8 @@ export default function PromptBox({
   setProfiles,
   selectedId,
   setSelectedId,
+  onGroundingFilesChange,
+  profileSummary,
 }: PromptBoxProps) {
   const handleKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -43,7 +47,10 @@ export default function PromptBox({
       />
       <div className="prompt-box-footer">
         <div className="prompt-meta">
-          <AttachmentMenu />
+          <AttachmentMenu
+            onGroundingChange={onGroundingFilesChange}
+            profileSummary={profileSummary}
+          />
           <ProfileSelector
             profiles={profiles}
             setProfiles={setProfiles}

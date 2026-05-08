@@ -99,9 +99,218 @@
   opacity: 0.9;
 }
 
+/* Pipeline steps */
+.landing-steps {
+  width: 100%;
+  margin-top: 36px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.landing-step {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 20px;
+  background: var(--surface);
+}
+
+.landing-step + .landing-step {
+  border-left: 1px solid var(--border);
+}
+
+.landing-step-num {
+  font-size: 10px;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  color: var(--accent);
+  letter-spacing: 0.08em;
+}
+
+.landing-step-title {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.landing-step-desc {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* Output preview */
+.landing-output {
+  width: 100%;
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.landing-output-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  background: var(--surface);
+}
+
+.landing-output-col + .landing-output-col {
+  border-left: 1px solid var(--border);
+}
+
+.landing-output-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+.landing-output-inferring {
+  font-size: 10px;
+  color: var(--accent);
+  text-transform: none;
+  letter-spacing: 0;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Schema mini-table */
+.landing-schema {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.landing-schema-header,
+.landing-schema-row {
+  display: grid;
+  grid-template-columns: 1fr 52px 52px;
+  gap: 8px;
+}
+
+.landing-schema-header {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.landing-schema-row {
+  font-size: 12px;
+}
+
+.landing-schema-name {
+  color: var(--text-muted);
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 11px;
+}
+
+.landing-schema-type {
+  color: var(--text-dim);
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 11px;
+}
+
+.landing-schema-sample {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.landing-schema-row-empty .landing-schema-name,
+.landing-schema-row-empty .landing-schema-type,
+.landing-schema-row-empty .landing-schema-sample {
+  color: var(--border);
+}
+
+.landing-schema-extra {
+  font-size: 10px;
+  color: var(--text-dim);
+  padding-top: 4px;
+}
+
+/* Validation metrics (shared, used in output preview) */
+.landing-vp-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.landing-vp-row {
+  display: grid;
+  grid-template-columns: 78px 1fr 26px;
+  align-items: center;
+  gap: 10px;
+}
+
+.landing-vp-row-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.landing-vp-track {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.landing-vp-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.landing-vp-score {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: right;
+}
+
+.landing-vp-score-empty {
+  color: var(--border);
+}
+
+.landing-vp-hint {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 6px;
+}
+
 @media (max-width: 720px) {
   .landing-title { font-size: 28px; }
   .landing { padding: 0 16px 60px; }
+  .landing-steps {
+    grid-template-columns: 1fr;
+  }
+  .landing-step + .landing-step {
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+  .landing-output {
+    grid-template-columns: 1fr;
+  }
+  .landing-output-col + .landing-output-col {
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
 }
 
 @media (max-width: 480px) {
