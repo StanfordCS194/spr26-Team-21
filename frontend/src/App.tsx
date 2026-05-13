@@ -26,7 +26,7 @@ import {
   type SourceStats,
 } from './api/client';
 
-const PROFILES_STORAGE_KEY = 'aperture:profiles:v1';
+const PROFILES_STORAGE_KEY = 'aperture:profiles:v2';
 
 function loadProfiles(): Profile[] {
   try {

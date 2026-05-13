@@ -25,10 +25,10 @@ const VALIDATION_LABELS = ['Realism', 'Diversity', 'Safety / PII'];
 const PLACEHOLDER_ROWS = [null, null, null] as const;
 
 const SAMPLE_PROMPTS = [
-  '10k auto BI claims with staged-accident fraud patterns and provider-billing anomalies',
-  'Homeowners CAT losses for a Florida hurricane scenario, preserving peril–geo correlations',
-  'Underwriting cohort: 50k auto policies with mileage, age, and prior-claim correlations',
-  'Reinsurance bordereau: 10k claims with realistic loss-ratio dispersion by state',
+  'Generate 10k auto fraud claims with realistic patterns — amplify the rare cases so models can actually learn',
+  'Suspicious-claim cohort: policyholder at fault, recent address change, no witnesses or police report',
+  'Balanced training set focused on young drivers and All Perils coverage where fraud rates run highest',
+  'Edge cases for fraud detection — rural accidents, utility vehicles, and brand-new policyholders filing right away',
 ];
 
 function buildSteps(fileNames: string[]) {
