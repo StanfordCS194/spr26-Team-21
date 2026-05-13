@@ -14,7 +14,7 @@ from typing import Any, Generator
 
 from core.config import llm
 from services.agents import tools
-from services.profile import profile_dataframe
+from services.profile import profile_dataframe_streaming
 
 MODEL = "claude-sonnet-4-6"
 MAX_TURNS = 12
@@ -212,14 +212,34 @@ def run_agent(
 
     # Drop the synthetic _segment label before profiling so it doesn't pollute the schema.
     profile_input = df.drop(columns=[c for c in df.columns if c == "_segment"], errors="ignore")
-    payload = profile_dataframe(profile_input)
-    payload["host"] = tools.safe_summary_for_uri(uri)
-    payload["grounding_strategy"] = {
-        "rationale": finalize_payload.get("rationale", ""),
-        "queries": query_stats,
-        "total_rows": len(df),
+
+    columns_acc: list[dict[str, Any]] = []
+    stats_acc: dict[str, Any] = {}
+    model_id_final: Any = None
+    source_rows_final = len(profile_input)
+
+    for event in profile_dataframe_streaming(profile_input):
+        if event["type"] == "schema_complete":
+            columns_acc = event["columns"]
+            stats_acc = event["stats"]
+            model_id_final = event["model_id"]
+            source_rows_final = event["source_rows"]
+            continue
+        yield event
+
+    yield {
+        "type": "final",
+        "columns": columns_acc,
+        "stats": stats_acc,
+        "source_rows": source_rows_final,
+        "model_id": model_id_final,
+        "host": tools.safe_summary_for_uri(uri),
+        "grounding_strategy": {
+            "rationale": finalize_payload.get("rationale", ""),
+            "queries": query_stats,
+            "total_rows": len(df),
+        },
     }
-    yield {"type": "final", **payload}
 
 
 def _input_summary(tool_name: str, tool_input: dict[str, Any]) -> str:

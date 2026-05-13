@@ -199,6 +199,9 @@ export type AgentEvent =
   | { type: 'step_start'; turn: number; tool: string; input_summary: string }
   | { type: 'step_complete'; turn: number; result_summary: string; duration_ms: number }
   | { type: 'rationale'; text: string; queries: Array<Record<string, unknown>> }
+  | { type: 'schema_start'; total_columns: number; source_rows: number }
+  | { type: 'schema_column'; idx: number; total: number; column: SchemaColumn }
+  | { type: 'fitting_model'; total_columns: number; source_rows: number }
   | ({ type: 'final' } & MongoInferResponse & {
         grounding_strategy?: {
           rationale: string;

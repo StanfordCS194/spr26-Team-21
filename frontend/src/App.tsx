@@ -16,6 +16,8 @@ import {
   type AgentStatus,
   type AgentTurn,
   type GroundingStrategyData,
+  type SchemaInferenceState,
+  type SchemaRow,
   type WorkspaceMessage,
   type ClarifyingQuestion,
   type GenerationSpec,
@@ -113,15 +115,6 @@ function App() {
         prev.map((m) => (m.id === msgId && m.role === 'assistant' ? { ...m, ...p } : m)),
       );
 
-    const setAgentStatus = (id: string, status: AgentStatus) =>
-      patch({
-        agents: initialAgents.map((a) => {
-          if (a.id === id) return { ...a, status };
-          if (status === 'running' && a.id < id) return { ...a, status: 'done' };
-          return a;
-        }),
-      });
-
     setMessages([
       { id: 'm-user-1', role: 'user', text: trimmed },
       { id: msgId, role: 'assistant', loading: true },
@@ -153,8 +146,10 @@ function App() {
       let agentStats: SourceStats | null = null;
       let agentModelId: string | null = null;
       let agentHost: string | undefined;
+      const liveSchema: SchemaRow[] = [];
+      let schemaState: SchemaInferenceState = { phase: 'idle' };
 
-      patch({ loading: false, plan: planData, agentTurns: [] });
+      patch({ loading: false, plan: planData, agentTurns: [], schemaInference: schemaState });
 
       try {
         await mongoAutoInferStream(
@@ -187,18 +182,56 @@ function App() {
                 queries: [],
               };
               patch({ groundingStrategy: strategy });
+            } else if (event.type === 'schema_start') {
+              schemaState = {
+                phase: 'scanning',
+                idx: 0,
+                total: event.total_columns,
+                sourceRows: event.source_rows,
+              };
+              patch({ schemaInference: schemaState, schema: [] });
+            } else if (event.type === 'schema_column') {
+              liveSchema.push({
+                column: event.column.column,
+                type: event.column.type,
+                distribution: event.column.distribution,
+                sample: event.column.sample,
+              });
+              schemaState = {
+                phase: 'scanning',
+                idx: event.idx,
+                total: event.total,
+                latest: event.column.column,
+                sourceRows:
+                  schemaState.phase === 'scanning' ? schemaState.sourceRows : 0,
+              };
+              patch({ schemaInference: schemaState, schema: [...liveSchema] });
+            } else if (event.type === 'fitting_model') {
+              schemaState = {
+                phase: 'fitting',
+                total: event.total_columns,
+                sourceRows: event.source_rows,
+              };
+              patch({ schemaInference: schemaState });
             } else if (event.type === 'final') {
               agentSchema = event.columns;
               agentStats = event.stats;
               agentModelId = event.model_id ?? null;
               agentHost = event.host;
+              schemaState = {
+                phase: 'done',
+                total: event.columns.length,
+                sourceRows: event.source_rows ?? 0,
+              };
               if (event.grounding_strategy) {
                 strategy = {
                   rationale: event.grounding_strategy.rationale,
                   totalRows: event.grounding_strategy.total_rows,
                   queries: event.grounding_strategy.queries,
                 };
-                patch({ groundingStrategy: strategy });
+                patch({ groundingStrategy: strategy, schemaInference: schemaState });
+              } else {
+                patch({ schemaInference: schemaState });
               }
             } else if (event.type === 'error') {
               const lastRunning = turns.find((t) => t.status === 'running');
@@ -215,7 +248,7 @@ function App() {
       }
 
       patch({
-        schema: agentSchema ?? SCHEMA_ROWS,
+        schema: agentSchema ?? (liveSchema.length ? liveSchema : SCHEMA_ROWS),
         sourceStats: agentStats ?? undefined,
         modelId: agentModelId,
         host: agentHost,
@@ -288,18 +321,17 @@ function App() {
       }
     }
 
-    patch({ loading: false, plan: planData, agents: initialAgents });
-
-    await wait(500);
-    setAgentStatus('a1', 'running');
-    await wait(1100);
-    setAgentStatus('a2', 'running');
-    await wait(1100);
-    setAgentStatus('a3', 'running');
-    await wait(1100);
+    // Legacy non-agent path: schema is done as soon as the API returns.
+    // Sample synthesis + fidelity validation stay queued until the user clicks Generate
+    // (AssistantMessage flips them locally when the SDV generate call fires).
+    const sequencedAgents = initialAgents.map((a) =>
+      a.id === 'a1' ? { ...a, status: 'done' as AgentStatus } : a,
+    );
 
     patch({
-      agents: initialAgents.map((a) => ({ ...a, status: 'done' })),
+      loading: false,
+      plan: planData,
+      agents: sequencedAgents,
       schema: schema ?? SCHEMA_ROWS,
       sourceStats: stats ?? undefined,
       originalPrompt: trimmed,

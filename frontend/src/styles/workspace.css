@@ -1422,3 +1422,83 @@
   white-space: nowrap;
   font-size: 10.5px;
 }
+
+/* ── Schema inference progress (live column ticker) ─────────────────────── */
+.schema-progress {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 12px 14px;
+  margin-top: 10px;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  transition: border-color 0.2s;
+}
+
+.schema-progress.phase-scanning,
+.schema-progress.phase-fitting {
+  border-color: var(--accent);
+}
+
+.schema-progress.phase-done {
+  border-color: rgba(120, 200, 120, 0.35);
+}
+
+.schema-progress-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.schema-progress-tag {
+  font-size: 10px;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--bg);
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+}
+
+.schema-progress.phase-done .schema-progress-tag {
+  color: rgba(120, 200, 120, 0.95);
+  border-color: rgba(120, 200, 120, 0.5);
+}
+
+.schema-progress-headline {
+  font-size: 12px;
+  color: var(--text);
+  flex: 1;
+}
+
+.schema-progress-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.schema-progress-dot.pulse {
+  animation: agent-pulse 1.0s ease-in-out infinite;
+}
+
+.schema-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--bg);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.schema-progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.15s ease-out;
+}
+
+.schema-progress.phase-done .schema-progress-bar-fill {
+  background: rgba(120, 200, 120, 0.7);
+}

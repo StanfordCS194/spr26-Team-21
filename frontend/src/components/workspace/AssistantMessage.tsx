@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Logo from '../Logo';
 import AgentTaskList from './AgentTaskList';
 import AgentTrace from './AgentTrace';
 import GroundingStrategy from './GroundingStrategy';
 import SchemaCard from './SchemaCard';
+import SchemaInferenceProgress from './SchemaInferenceProgress';
 import ValidationReport from './ValidationReport';
 import ClarifyingQuestions from './ClarifyingQuestions';
 import PreviewTable from './PreviewTable';
@@ -30,6 +31,7 @@ export default function AssistantMessage({
   agents,
   agentTurns,
   groundingStrategy,
+  schemaInference,
   schema,
   sourceStats,
   originalPrompt,
@@ -52,6 +54,25 @@ export default function AssistantMessage({
   const [clarifyDismissed, setClarifyDismissed] = useState(false);
 
   const hasClarifying = (clarifyingQuestions?.length ?? 0) > 0 && !clarifyDismissed;
+
+  // Sync the legacy 3-step agent panel with real user-driven actions:
+  //   a1 (Schema)        — already "done" when message renders (set by App.tsx)
+  //   a2 (Synthesizer)   — running while previewing or generating, done after
+  //   a3 (Fidelity)      — running during the brief 'validating' window, done after
+  const displayedAgents = useMemo(() => {
+    if (!agents) return undefined;
+    return agents.map((a) => {
+      if (a.id === 'a2') {
+        if (approval === 'generating' || previewLoading) return { ...a, status: 'running' as const };
+        if (approval === 'validating' || approval === 'complete') return { ...a, status: 'done' as const };
+      }
+      if (a.id === 'a3') {
+        if (approval === 'validating') return { ...a, status: 'running' as const };
+        if (approval === 'complete') return { ...a, status: 'done' as const };
+      }
+      return a;
+    });
+  }, [agents, approval, previewLoading]);
 
   const handlePreview = async () => {
     if (!schema || schema.length === 0) return;
@@ -138,9 +159,12 @@ export default function AssistantMessage({
               <>
                 <AgentTrace turns={agentTurns} />
                 {groundingStrategy && <GroundingStrategy strategy={groundingStrategy} />}
+                {schemaInference && schemaInference.phase !== 'idle' && (
+                  <SchemaInferenceProgress state={schemaInference} />
+                )}
               </>
             ) : (
-              agents && <AgentTaskList agents={agents} />
+              displayedAgents && <AgentTaskList agents={displayedAgents} />
             )}
             {schema && (
               <>

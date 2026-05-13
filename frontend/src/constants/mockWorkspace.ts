@@ -117,6 +117,12 @@ export interface GroundingStrategyData {
   queries: Array<{ label: string; rows: number; filter: Record<string, unknown> }>;
 }
 
+export type SchemaInferenceState =
+  | { phase: 'idle' }
+  | { phase: 'scanning'; idx: number; total: number; latest?: string; sourceRows: number }
+  | { phase: 'fitting'; total: number; sourceRows: number }
+  | { phase: 'done'; total: number; sourceRows: number };
+
 export type WorkspaceMessage =
   | { id: string; role: 'user'; text: string }
   | {
@@ -128,6 +134,7 @@ export type WorkspaceMessage =
       agents?: AgentTask[];
       agentTurns?: AgentTurn[];
       groundingStrategy?: GroundingStrategyData;
+      schemaInference?: SchemaInferenceState;
       schema?: SchemaRow[];
       initialApproval?: ApprovalState;
       sourceStats?: Record<string, Record<string, unknown>>;
