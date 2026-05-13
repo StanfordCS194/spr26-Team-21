@@ -24,6 +24,13 @@ const VALIDATION_LABELS = ['Realism', 'Diversity', 'Safety / PII'];
 
 const PLACEHOLDER_ROWS = [null, null, null] as const;
 
+const SAMPLE_PROMPTS = [
+  'Generate 10k auto fraud claims with realistic patterns — amplify the rare cases so models can actually learn',
+  'Suspicious-claim cohort: policyholder at fault, recent address change, no witnesses or police report',
+  'Balanced training set focused on young drivers and All Perils coverage where fraud rates run highest',
+  'Edge cases for fraud detection — rural accidents, utility vehicles, and brand-new policyholders filing right away',
+];
+
 function buildSteps(fileNames: string[]) {
   const fileRef =
     fileNames.length === 0
@@ -36,17 +43,17 @@ function buildSteps(fileNames: string[]) {
     {
       num: '01',
       title: 'Schema inference',
-      desc: `Scans ${fileRef} to extract column signatures, infer types, and model statistical distributions.`,
+      desc: `Scans ${fileRef} to extract claim signatures, infer types, and model severity, frequency, and report-lag distributions.`,
     },
     {
       num: '02',
       title: 'Sample synthesis',
-      desc: 'Generates statistically faithful rows that preserve inter-column correlations and your profile constraints.',
+      desc: 'Generates loss-ratio-faithful rows with Poisson frequency, lognormal severity, and preserved peril–geo correlations.',
     },
     {
       num: '03',
       title: 'Fidelity validation',
-      desc: 'Cross-validates synthesized distributions against source samples and issues a quality report before delivery.',
+      desc: 'Cross-validates synthesized distributions against source bordereaux and issues an actuarial fidelity report before delivery.',
     },
   ];
 }
@@ -69,7 +76,7 @@ export default function Landing(props: LandingProps) {
     <div className="landing">
       <h1 className="landing-title">
         <Logo className="landing-title-logo" />
-        What should we synthesize?
+        What claims data should we synthesize?
       </h1>
 
       <PromptBox
@@ -77,6 +84,20 @@ export default function Landing(props: LandingProps) {
         onGroundingFilesChange={onGroundingFilesChange}
         profileSummary={profileSummary}
       />
+
+      <div className="landing-samples" role="list" aria-label="Sample prompts">
+        {SAMPLE_PROMPTS.map((text) => (
+          <button
+            key={text}
+            type="button"
+            role="listitem"
+            className="landing-sample-chip"
+            onClick={() => promptProps.setPrompt(text)}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
 
       <div className="landing-steps">
         {steps.map((s) => (

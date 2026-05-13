@@ -138,3 +138,114 @@ export async function generate(
 export function downloadUrl(sessionId: string): string {
   return `${BASE}/download/${sessionId}`;
 }
+
+export interface MongoTestResponse {
+  ok: boolean;
+  host?: string;
+  databases?: Array<{ name: string }>;
+  error?: string;
+}
+
+export interface MongoCollectionsResponse {
+  ok: boolean;
+  collections?: Array<{ name: string; count: number | null }>;
+  error?: string;
+}
+
+export interface MongoInferResponse extends InferSchemaResponse {
+  host?: string;
+}
+
+export async function mongoTest(uri: string): Promise<MongoTestResponse> {
+  const res = await fetch(`${BASE}/sources/mongo/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uri }),
+  });
+  if (!res.ok) throw new Error(`Mongo test failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function mongoListCollections(
+  uri: string,
+  db: string,
+): Promise<MongoCollectionsResponse> {
+  const res = await fetch(`${BASE}/sources/mongo/collections`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uri, db }),
+  });
+  if (!res.ok) throw new Error(`Mongo collections failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function mongoInferSchema(
+  uri: string,
+  db: string,
+  collection: string,
+): Promise<MongoInferResponse> {
+  const res = await fetch(`${BASE}/sources/mongo/infer-schema`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uri, db, collection }),
+  });
+  if (!res.ok) throw new Error(`Mongo schema inference failed: ${res.statusText}`);
+  return res.json();
+}
+
+// ── Sourcing agent (SSE stream) ──────────────────────────────────────────
+
+export type AgentEvent =
+  | { type: 'step_start'; turn: number; tool: string; input_summary: string }
+  | { type: 'step_complete'; turn: number; result_summary: string; duration_ms: number }
+  | { type: 'rationale'; text: string; queries: Array<Record<string, unknown>> }
+  | { type: 'schema_start'; total_columns: number; source_rows: number }
+  | { type: 'schema_column'; idx: number; total: number; column: SchemaColumn }
+  | { type: 'fitting_model'; total_columns: number; source_rows: number }
+  | ({ type: 'final' } & MongoInferResponse & {
+        grounding_strategy?: {
+          rationale: string;
+          queries: Array<{ label: string; rows: number; filter: Record<string, unknown> }>;
+          total_rows: number;
+        };
+      })
+  | { type: 'error'; message: string };
+
+export async function mongoAutoInferStream(
+  uri: string,
+  db: string,
+  collection: string | null,
+  prompt: string,
+  onEvent: (event: AgentEvent) => void,
+): Promise<void> {
+  const res = await fetch(`${BASE}/sources/mongo/auto-infer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uri, db, collection, prompt }),
+  });
+  if (!res.body) throw new Error('No response body from auto-infer');
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buffer.indexOf('\n\n')) !== -1) {
+      const raw = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      const line = raw.trim();
+      if (!line.startsWith('data:')) continue;
+      const payload = line.slice(5).trim();
+      if (!payload) continue;
+      try {
+        onEvent(JSON.parse(payload) as AgentEvent);
+      } catch {
+        // ignore malformed event
+      }
+    }
+  }
+}

@@ -1214,3 +1214,291 @@
 .ws-followup-submit:hover {
   opacity: 0.9;
 }
+
+/* ── Agent trace (live tool calls) ─────────────────────────────────── */
+.agent-trace {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 14px 16px;
+  margin-top: 12px;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+}
+
+.agent-trace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.agent-trace-title {
+  font-size: 11px;
+  color: var(--text);
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+}
+
+.agent-trace-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.agent-trace-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-trace-turn {
+  border-left: 2px solid var(--border);
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text);
+  transition: border-color 0.2s;
+}
+
+.agent-trace-turn.status-running {
+  border-left-color: var(--accent);
+}
+
+.agent-trace-turn.status-done {
+  border-left-color: rgba(120, 200, 120, 0.5);
+}
+
+.agent-trace-turn.status-error {
+  border-left-color: #ff8a80;
+}
+
+.agent-trace-turn-head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 11px;
+}
+
+.agent-trace-turn-num {
+  color: var(--text-dim);
+  letter-spacing: 0.4px;
+}
+
+.agent-trace-tool {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.agent-trace-status {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.agent-trace-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+}
+
+.agent-trace-dot.pulse {
+  animation: agent-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes agent-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+.agent-trace-check {
+  color: rgba(120, 200, 120, 0.85);
+}
+
+.agent-trace-err {
+  color: #ff8a80;
+  font-weight: 700;
+}
+
+.agent-trace-duration {
+  color: var(--text-dim);
+}
+
+.agent-trace-turn-body {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agent-trace-input {
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
+.agent-trace-result {
+  color: var(--text);
+  font-size: 11.5px;
+}
+
+/* ── Grounding strategy callout ─────────────────────────────────── */
+.grounding-strategy {
+  width: 100%;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 14px 16px;
+  margin-top: 10px;
+}
+
+.grounding-strategy-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.grounding-strategy-tag {
+  font-size: 10px;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-family: ui-monospace, "Cascadia Code", monospace;
+}
+
+.grounding-strategy-rows {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: ui-monospace, "Cascadia Code", monospace;
+}
+
+.grounding-strategy-rationale {
+  margin: 0 0 10px 0;
+  font-size: 13.5px;
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.grounding-strategy-queries {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.grounding-strategy-query {
+  display: grid;
+  grid-template-columns: 120px 80px 1fr;
+  gap: 10px;
+  font-size: 11px;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  color: var(--text-dim);
+  align-items: center;
+}
+
+.grounding-strategy-query-label {
+  color: var(--text);
+}
+
+.grounding-strategy-query-rows {
+  color: var(--text-dim);
+}
+
+.grounding-strategy-query-filter {
+  color: var(--text-dim);
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+}
+
+/* ── Schema inference progress (live column ticker) ─────────────────────── */
+.schema-progress {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 12px 14px;
+  margin-top: 10px;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  transition: border-color 0.2s;
+}
+
+.schema-progress.phase-scanning,
+.schema-progress.phase-fitting {
+  border-color: var(--accent);
+}
+
+.schema-progress.phase-done {
+  border-color: rgba(120, 200, 120, 0.35);
+}
+
+.schema-progress-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.schema-progress-tag {
+  font-size: 10px;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--bg);
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+}
+
+.schema-progress.phase-done .schema-progress-tag {
+  color: rgba(120, 200, 120, 0.95);
+  border-color: rgba(120, 200, 120, 0.5);
+}
+
+.schema-progress-headline {
+  font-size: 12px;
+  color: var(--text);
+  flex: 1;
+}
+
+.schema-progress-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.schema-progress-dot.pulse {
+  animation: agent-pulse 1.0s ease-in-out infinite;
+}
+
+.schema-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--bg);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.schema-progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.15s ease-out;
+}
+
+.schema-progress.phase-done .schema-progress-bar-fill {
+  background: rgba(120, 200, 120, 0.7);
+}

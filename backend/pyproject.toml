@@ -9,7 +9,7 @@ package-mode = false
 [tool.poetry.dependencies]
 python = ">=3.11,<3.14"
 fastapi = ">=0.111.0"
-"uvicorn[standard]" = ">=0.29.0"
+uvicorn = {version = ">=0.29.0", extras = ["standard"]}
 python-multipart = ">=0.0.9"
 pandas = ">=2.2.0"
 numpy = ">=1.26.0"
@@ -19,6 +19,8 @@ pyarrow = ">=16.0.0"
 python-dotenv = ">=1.0.0"
 anthropic = ">=0.28.0"
 sdv = ">=1.11.0"
+pymongo = ">=4.7.0"
+dnspython = ">=2.6.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0"]

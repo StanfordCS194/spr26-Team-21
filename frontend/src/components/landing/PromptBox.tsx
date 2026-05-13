@@ -42,8 +42,8 @@ export default function PromptBox({
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Describe the dataset you need..."
-        aria-label="Describe the dataset you want to synthesize"
+        placeholder="e.g. 10k auto fraud claims with realistic patterns — amplify the rare cases so models can learn..."
+        aria-label="Describe the insurance dataset you want to synthesize"
       />
       <div className="prompt-box-footer">
         <div className="prompt-meta">
