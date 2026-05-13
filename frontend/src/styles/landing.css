@@ -99,6 +99,40 @@
   opacity: 0.9;
 }
 
+/* Sample prompts */
+.landing-samples {
+  width: 100%;
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.landing-sample-chip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.landing-sample-chip:hover {
+  border-color: var(--text-dim);
+  color: var(--text);
+  background: var(--surface-hover, var(--surface));
+}
+
+.landing-sample-chip:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  color: var(--text);
+}
+
 /* Pipeline steps */
 .landing-steps {
   width: 100%;
