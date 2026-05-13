@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { Integration, IntegrationWithOrder, Profile } from '../../constants/integrations';
+import type {
+  Integration,
+  IntegrationWithOrder,
+  MongoConfig,
+  Profile,
+} from '../../constants/integrations';
 import { Close, Search } from '../icons/Icons';
 import IntegrationGrid from './IntegrationGrid';
+import MongoConnectModal from './MongoConnectModal';
 
 interface ProfileModalProps {
   mode: 'view' | 'add';
@@ -26,11 +32,16 @@ export default function ProfileModal({ mode, profile, onClose, onSave, onUpdate 
     }))
   );
   const [orderCounter, setOrderCounter] = useState(nextOrder);
+  const [mongoModalOpen, setMongoModalOpen] = useState(false);
 
   const stripOrder = (items: IntegrationWithOrder[]): Integration[] =>
     items.map(({ connectedOrder: _, ...rest }) => rest);
 
   const connectIntegration = useCallback((slug: string) => {
+    if (slug === 'mongodb') {
+      setMongoModalOpen(true);
+      return;
+    }
     setIntegrations((prev) => {
       const next = prev.map((i) =>
         i.slug === slug ? { ...i, enabled: true, connectedOrder: orderCounter } : i
@@ -39,6 +50,25 @@ export default function ProfileModal({ mode, profile, onClose, onSave, onUpdate 
       return next;
     });
     setOrderCounter((c) => c + 1);
+  }, [orderCounter, onUpdate]);
+
+  const handleMongoConnected = useCallback((config: MongoConfig) => {
+    setIntegrations((prev) => {
+      const next = prev.map((i) =>
+        i.slug === 'mongodb'
+          ? {
+              ...i,
+              enabled: true,
+              connectedOrder: orderCounter,
+              config: { kind: 'mongo' as const, mongo: config },
+            }
+          : i,
+      );
+      onUpdate?.(stripOrder(next));
+      return next;
+    });
+    setOrderCounter((c) => c + 1);
+    setMongoModalOpen(false);
   }, [orderCounter, onUpdate]);
 
   const toggleIntegration = useCallback((slug: string) => {
@@ -157,6 +187,17 @@ export default function ProfileModal({ mode, profile, onClose, onSave, onUpdate 
           )}
         </div>
       </div>
+      {mongoModalOpen && (
+        <MongoConnectModal
+          initialConfig={
+            integrations.find((i) => i.slug === 'mongodb')?.config?.kind === 'mongo'
+              ? integrations.find((i) => i.slug === 'mongodb')!.config!.mongo
+              : undefined
+          }
+          onClose={() => setMongoModalOpen(false)}
+          onConnect={handleMongoConnected}
+        />
+      )}
     </div>,
     document.body
   );
