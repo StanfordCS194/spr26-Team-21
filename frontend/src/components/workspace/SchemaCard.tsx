@@ -2,11 +2,18 @@ import type { SchemaRow } from '../../constants/mockWorkspace';
 
 interface SchemaCardProps {
   rows: SchemaRow[];
-  source?: 'llm' | 'upload';
+  source?: 'llm' | 'upload' | 'agent';
 }
 
 export default function SchemaCard({ rows, source }: SchemaCardProps) {
-  const sourceLabel = source === 'llm' ? 'AI-inferred' : source === 'upload' ? 'File-grounded' : null;
+  const sourceLabel =
+    source === 'llm'
+      ? 'AI-inferred'
+      : source === 'upload'
+        ? 'File-grounded'
+        : source === 'agent'
+          ? 'Agent-grounded'
+          : null;
   return (
     <div className="ws-schema-card">
       <div className="ws-schema-header">

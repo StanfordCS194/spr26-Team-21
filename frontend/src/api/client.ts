@@ -192,3 +192,57 @@ export async function mongoInferSchema(
   if (!res.ok) throw new Error(`Mongo schema inference failed: ${res.statusText}`);
   return res.json();
 }
+
+// ── Sourcing agent (SSE stream) ──────────────────────────────────────────
+
+export type AgentEvent =
+  | { type: 'step_start'; turn: number; tool: string; input_summary: string }
+  | { type: 'step_complete'; turn: number; result_summary: string; duration_ms: number }
+  | { type: 'rationale'; text: string; queries: Array<Record<string, unknown>> }
+  | ({ type: 'final' } & MongoInferResponse & {
+        grounding_strategy?: {
+          rationale: string;
+          queries: Array<{ label: string; rows: number; filter: Record<string, unknown> }>;
+          total_rows: number;
+        };
+      })
+  | { type: 'error'; message: string };
+
+export async function mongoAutoInferStream(
+  uri: string,
+  db: string,
+  collection: string | null,
+  prompt: string,
+  onEvent: (event: AgentEvent) => void,
+): Promise<void> {
+  const res = await fetch(`${BASE}/sources/mongo/auto-infer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uri, db, collection, prompt }),
+  });
+  if (!res.body) throw new Error('No response body from auto-infer');
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buffer.indexOf('\n\n')) !== -1) {
+      const raw = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      const line = raw.trim();
+      if (!line.startsWith('data:')) continue;
+      const payload = line.slice(5).trim();
+      if (!payload) continue;
+      try {
+        onEvent(JSON.parse(payload) as AgentEvent);
+      } catch {
+        // ignore malformed event
+      }
+    }
+  }
+}

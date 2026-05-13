@@ -14,14 +14,18 @@ import {
   buildExecutionPlan,
   SCHEMA_ROWS,
   type AgentStatus,
+  type AgentTurn,
+  type GroundingStrategyData,
   type WorkspaceMessage,
   type ClarifyingQuestion,
   type GenerationSpec,
 } from './constants/mockWorkspace';
 import {
   inferSchema,
+  mongoAutoInferStream,
   mongoInferSchema,
   planFromPrompt,
+  type AgentEvent,
   type SchemaColumn,
   type SourceStats,
 } from './api/client';
@@ -140,6 +144,93 @@ function App() {
     );
     const mongoConfig =
       mongoIntegration?.config?.kind === 'mongo' ? mongoIntegration.config.mongo : null;
+
+    // ── Sourcing agent path (Mongo + auto-select) ──────────────────────
+    if (mongoConfig && mongoConfig.collection === '__auto__' && groundingFiles.length === 0) {
+      const turns: AgentTurn[] = [];
+      let strategy: GroundingStrategyData | null = null;
+      let agentSchema: SchemaColumn[] | null = null;
+      let agentStats: SourceStats | null = null;
+      let agentModelId: string | null = null;
+      let agentHost: string | undefined;
+
+      patch({ loading: false, plan: planData, agentTurns: [] });
+
+      try {
+        await mongoAutoInferStream(
+          mongoConfig.uri,
+          mongoConfig.db,
+          null,
+          trimmed,
+          (event: AgentEvent) => {
+            if (event.type === 'step_start') {
+              turns.push({
+                turn: event.turn,
+                tool: event.tool,
+                inputSummary: event.input_summary,
+                status: 'running',
+              });
+              patch({ agentTurns: [...turns] });
+            } else if (event.type === 'step_complete') {
+              const last = turns.find(
+                (t) => t.turn === event.turn && t.status === 'running',
+              );
+              if (last) {
+                last.status = 'done';
+                last.resultSummary = event.result_summary;
+                last.durationMs = event.duration_ms;
+              }
+              patch({ agentTurns: [...turns] });
+            } else if (event.type === 'rationale') {
+              strategy = {
+                rationale: event.text,
+                queries: [],
+              };
+              patch({ groundingStrategy: strategy });
+            } else if (event.type === 'final') {
+              agentSchema = event.columns;
+              agentStats = event.stats;
+              agentModelId = event.model_id ?? null;
+              agentHost = event.host;
+              if (event.grounding_strategy) {
+                strategy = {
+                  rationale: event.grounding_strategy.rationale,
+                  totalRows: event.grounding_strategy.total_rows,
+                  queries: event.grounding_strategy.queries,
+                };
+                patch({ groundingStrategy: strategy });
+              }
+            } else if (event.type === 'error') {
+              const lastRunning = turns.find((t) => t.status === 'running');
+              if (lastRunning) {
+                lastRunning.status = 'error';
+                lastRunning.resultSummary = event.message;
+              }
+              patch({ agentTurns: [...turns] });
+            }
+          },
+        );
+      } catch (e) {
+        console.error('Sourcing agent failed', e);
+      }
+
+      patch({
+        schema: agentSchema ?? SCHEMA_ROWS,
+        sourceStats: agentStats ?? undefined,
+        modelId: agentModelId,
+        host: agentHost,
+        originalPrompt: trimmed,
+        schemaSource: 'agent',
+        generationSpec: {
+          row_count: 10_000,
+          format: 'csv',
+          labels: [],
+          edge_cases: [],
+          constraints: [],
+        },
+      });
+      return;
+    }
 
     if (groundingFiles.length > 0) {
       // Use already-inferred schema if available, otherwise infer now

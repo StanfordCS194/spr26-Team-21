@@ -100,6 +100,23 @@ export interface GenerationSpec {
   constraints: string[];
 }
 
+export type AgentTurnStatus = 'running' | 'done' | 'error';
+
+export interface AgentTurn {
+  turn: number;
+  tool: string;
+  inputSummary: string;
+  resultSummary?: string;
+  durationMs?: number;
+  status: AgentTurnStatus;
+}
+
+export interface GroundingStrategyData {
+  rationale: string;
+  totalRows?: number;
+  queries: Array<{ label: string; rows: number; filter: Record<string, unknown> }>;
+}
+
 export type WorkspaceMessage =
   | { id: string; role: 'user'; text: string }
   | {
@@ -109,14 +126,17 @@ export type WorkspaceMessage =
       plan?: ExecutionPlan;
       planText?: string;
       agents?: AgentTask[];
+      agentTurns?: AgentTurn[];
+      groundingStrategy?: GroundingStrategyData;
       schema?: SchemaRow[];
       initialApproval?: ApprovalState;
       sourceStats?: Record<string, Record<string, unknown>>;
       originalPrompt?: string;
       clarifyingQuestions?: ClarifyingQuestion[];
       generationSpec?: GenerationSpec;
-      schemaSource?: 'llm' | 'upload';
+      schemaSource?: 'llm' | 'upload' | 'agent';
       modelId?: string | null;
+      host?: string;
     };
 
 export const SCHEMA_TAG = 'APERTURE V1 · P&C CLAIMS';

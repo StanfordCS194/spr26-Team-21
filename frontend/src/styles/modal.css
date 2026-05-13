@@ -390,6 +390,27 @@
   color: var(--text-dim);
 }
 
+.mongo-auto-option {
+  border-color: var(--accent);
+  align-items: flex-start;
+}
+
+.mongo-auto-title {
+  display: block;
+  color: var(--text);
+  font-family: var(--sans, inherit);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.mongo-auto-sub {
+  display: block;
+  color: var(--text-dim);
+  font-family: var(--sans, inherit);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
 .mongo-error {
   font-size: 12.5px;
   color: #ff8a80;

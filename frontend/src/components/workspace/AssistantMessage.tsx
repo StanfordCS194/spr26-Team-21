@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import Logo from '../Logo';
 import AgentTaskList from './AgentTaskList';
+import AgentTrace from './AgentTrace';
+import GroundingStrategy from './GroundingStrategy';
 import SchemaCard from './SchemaCard';
 import ValidationReport from './ValidationReport';
 import ClarifyingQuestions from './ClarifyingQuestions';
@@ -26,6 +28,8 @@ export default function AssistantMessage({
   plan,
   planText,
   agents,
+  agentTurns,
+  groundingStrategy,
   schema,
   sourceStats,
   originalPrompt,
@@ -130,7 +134,14 @@ export default function AssistantMessage({
               </>
             )}
             {planText && <p className="ws-msg-text">{planText}</p>}
-            {agents && <AgentTaskList agents={agents} />}
+            {agentTurns && agentTurns.length > 0 ? (
+              <>
+                <AgentTrace turns={agentTurns} />
+                {groundingStrategy && <GroundingStrategy strategy={groundingStrategy} />}
+              </>
+            ) : (
+              agents && <AgentTaskList agents={agents} />
+            )}
             {schema && (
               <>
                 <SchemaCard rows={schema} source={schemaSource} />

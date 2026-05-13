@@ -188,7 +188,29 @@ export default function MongoConnectModal({
                   {host}/{selectedDb}
                 </code>
               </div>
-              <label className="field-label">Pick a collection</label>
+              <label className="field-label">How should Aperture pick a collection?</label>
+              <ul className="mongo-list">
+                <li>
+                  <button
+                    type="button"
+                    className={`mongo-list-item mongo-auto-option ${
+                      selectedCollection === '__auto__' ? 'selected' : ''
+                    }`}
+                    onClick={() => handlePickCollection('__auto__', null)}
+                  >
+                    <span>
+                      <span className="mongo-auto-title">Auto-select (recommended)</span>
+                      <span className="mongo-auto-sub">
+                        Sourcing agent picks the best fit for each prompt
+                      </span>
+                    </span>
+                    <span className="mongo-list-meta">agent</span>
+                  </button>
+                </li>
+              </ul>
+              <label className="field-label" style={{ marginTop: 12 }}>
+                Or pick a specific collection
+              </label>
               {collections.length === 0 ? (
                 <div className="modal-empty">No collections in this database.</div>
               ) : (
