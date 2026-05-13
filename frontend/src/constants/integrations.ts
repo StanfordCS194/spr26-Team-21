@@ -10,10 +10,21 @@ export function getLogoSrc(slug: string): string {
   return LOCAL_LOGOS[slug] || `${ICON_CDN_BASE}/${slug}/white`;
 }
 
+export interface MongoConfig {
+  uri: string;
+  db: string;
+  collection: string;
+  host: string;
+  rowCount?: number;
+}
+
+export type IntegrationConfig = { kind: 'mongo'; mongo: MongoConfig };
+
 export interface Integration {
   name: string;
   slug: string;
   enabled: boolean;
+  config?: IntegrationConfig;
 }
 
 export interface IntegrationWithOrder extends Integration {

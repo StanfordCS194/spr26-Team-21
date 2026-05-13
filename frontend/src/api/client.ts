@@ -138,3 +138,57 @@ export async function generate(
 export function downloadUrl(sessionId: string): string {
   return `${BASE}/download/${sessionId}`;
 }
+
+export interface MongoTestResponse {
+  ok: boolean;
+  host?: string;
+  databases?: Array<{ name: string }>;
+  error?: string;
+}
+
+export interface MongoCollectionsResponse {
+  ok: boolean;
+  collections?: Array<{ name: string; count: number | null }>;
+  error?: string;
+}
+
+export interface MongoInferResponse extends InferSchemaResponse {
+  host?: string;
+}
+
+export async function mongoTest(uri: string): Promise<MongoTestResponse> {
+  const res = await fetch(`${BASE}/sources/mongo/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uri }),
+  });
+  if (!res.ok) throw new Error(`Mongo test failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function mongoListCollections(
+  uri: string,
+  db: string,
+): Promise<MongoCollectionsResponse> {
+  const res = await fetch(`${BASE}/sources/mongo/collections`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uri, db }),
+  });
+  if (!res.ok) throw new Error(`Mongo collections failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function mongoInferSchema(
+  uri: string,
+  db: string,
+  collection: string,
+): Promise<MongoInferResponse> {
+  const res = await fetch(`${BASE}/sources/mongo/infer-schema`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uri, db, collection }),
+  });
+  if (!res.ok) throw new Error(`Mongo schema inference failed: ${res.statusText}`);
+  return res.json();
+}

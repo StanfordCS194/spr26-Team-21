@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import './App.css';
 import './styles/landing.css';
 import './styles/attachment.css';
@@ -20,10 +20,25 @@ import {
 } from './constants/mockWorkspace';
 import {
   inferSchema,
+  mongoInferSchema,
   planFromPrompt,
   type SchemaColumn,
   type SourceStats,
 } from './api/client';
+
+const PROFILES_STORAGE_KEY = 'aperture:profiles:v1';
+
+function loadProfiles(): Profile[] {
+  try {
+    const raw = localStorage.getItem(PROFILES_STORAGE_KEY);
+    if (!raw) return INITIAL_PROFILES;
+    const parsed = JSON.parse(raw) as Profile[];
+    if (!Array.isArray(parsed) || parsed.length === 0) return INITIAL_PROFILES;
+    return parsed;
+  } catch {
+    return INITIAL_PROFILES;
+  }
+}
 
 const wait = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
 
@@ -31,7 +46,15 @@ function App() {
   const [view, setView] = useState<'landing' | 'workspace'>('landing');
   const [prompt, setPrompt] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [profiles, setProfiles] = useState<Profile[]>(INITIAL_PROFILES);
+  const [profiles, setProfiles] = useState<Profile[]>(loadProfiles);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(profiles));
+    } catch {
+      // out of quota or in private mode — silently ignore
+    }
+  }, [profiles]);
   const [selectedId, setSelectedId] = useState('default');
   const [messages, setMessages] = useState<WorkspaceMessage[]>([]);
   const [groundingFiles, setGroundingFiles] = useState<File[]>([]);
@@ -112,6 +135,12 @@ function App() {
     let modelId: string | null = null;
     let planData = buildExecutionPlan(sourceNames);
 
+    const mongoIntegration = activeProfile.integrations.find(
+      (i) => i.slug === 'mongodb' && i.enabled && i.config?.kind === 'mongo',
+    );
+    const mongoConfig =
+      mongoIntegration?.config?.kind === 'mongo' ? mongoIntegration.config.mongo : null;
+
     if (groundingFiles.length > 0) {
       // Use already-inferred schema if available, otherwise infer now
       const result =
@@ -120,6 +149,27 @@ function App() {
           : await inferSchema(groundingFiles).catch(() => null);
 
       if (result) {
+        schema = result.columns;
+        stats = result.stats;
+        modelId = result.model_id ?? null;
+        schemaSource = 'upload';
+        generationSpec = {
+          row_count: 10_000,
+          format: 'csv',
+          labels: [],
+          edge_cases: [],
+          constraints: [],
+        };
+      }
+    } else if (mongoConfig) {
+      // MongoDB is the active grounding source — pull the collection through the backend
+      const result = await mongoInferSchema(
+        mongoConfig.uri,
+        mongoConfig.db,
+        mongoConfig.collection,
+      ).catch(() => null);
+
+      if (result && !result.error) {
         schema = result.columns;
         stats = result.stats;
         modelId = result.model_id ?? null;

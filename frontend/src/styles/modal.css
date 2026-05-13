@@ -287,6 +287,140 @@
   cursor: not-allowed;
 }
 
+/* Mongo connect modal */
+.mongo-backdrop {
+  z-index: 2100;
+}
+
+.mongo-modal {
+  max-width: 480px;
+}
+
+.mongo-steps {
+  display: flex;
+  gap: 6px;
+  padding: 12px 18px 0;
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+}
+
+.mongo-step {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  opacity: 0.55;
+}
+
+.mongo-step.active {
+  opacity: 1;
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.mongo-step.done {
+  opacity: 0.85;
+  color: var(--text);
+}
+
+.mongo-meta {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.mongo-meta code {
+  color: var(--text);
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 11.5px;
+}
+
+.mongo-hint {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.mongo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mongo-list-item {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.mongo-list-item:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.mongo-list-item.selected {
+  border-color: var(--accent);
+}
+
+.mongo-list-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mongo-list-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.mongo-error {
+  font-size: 12.5px;
+  color: #ff8a80;
+  background: rgba(255, 138, 128, 0.08);
+  border: 1px solid rgba(255, 138, 128, 0.3);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+/* Connected integration card detail */
+.integration-config-detail {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 2px;
+}
+
+.integration-card.has-config:not(.enabled) {
+  border-color: rgba(120, 200, 120, 0.18);
+  border-style: dashed;
+}
+
+.integration-card.has-config.enabled .integration-config-detail {
+  color: var(--text);
+}
+
 @media (max-width: 480px) {
   .modal {
     max-width: 100%;
