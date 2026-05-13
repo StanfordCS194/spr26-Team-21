@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "aperture-backend"
+version = "0.2.0"
+description = "Aperture backend — statistical data synthesis pipeline."
+authors = ["Aperture Team"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.14"
+fastapi = ">=0.111.0"
+"uvicorn[standard]" = ">=0.29.0"
+python-multipart = ">=0.0.9"
+pandas = ">=2.2.0"
+numpy = ">=1.26.0"
+scipy = ">=1.13.0"
+openpyxl = ">=3.1.0"
+pyarrow = ">=16.0.0"
+python-dotenv = ">=1.0.0"
+anthropic = ">=0.28.0"
+sdv = ">=1.11.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0"]
+build-backend = "poetry.core.masonry.api"

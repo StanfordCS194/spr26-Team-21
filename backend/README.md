@@ -14,9 +14,11 @@ FastAPI server that powers schema inference, synthetic data generation, and fide
 
 ## Setup
 
+Dependencies are managed with [Poetry](https://python-poetry.org/) (Python 3.11–3.13).
+
 ```bash
 cd backend
-pip install -r requirements.txt
+poetry install
 ```
 
 Create a `.env` file (copy from `.env.example` if present):
@@ -30,7 +32,31 @@ The API key is optional. Without it the `/api/plan` endpoint uses a deterministi
 Start the dev server:
 
 ```bash
-uvicorn main:app --reload --port 8000
+poetry run uvicorn main:app --reload --port 8000
+```
+
+## Project layout
+
+```
+backend/
+├── main.py            # FastAPI app + CORS + router wiring
+├── api/               # HTTP endpoints (one module per resource)
+│   ├── health.py      # GET  /health
+│   ├── plan.py        # POST /api/plan
+│   ├── schema.py      # POST /api/infer-schema
+│   └── generate.py    # POST /api/preview, /api/generate; GET /api/download/{id}
+├── core/
+│   ├── config.py      # .env, Anthropic client, SDV availability flags
+│   ├── state.py       # in-memory session + SDV model stores
+│   └── io.py          # upload file readers (csv / xlsx / parquet)
+├── models/
+│   └── schemas.py     # Pydantic request bodies
+└── services/
+    ├── inference.py   # column type / distribution / stats inference
+    ├── synthesis.py   # statistical sampler + SDV-aware row generator
+    ├── sdv_model.py   # GaussianCopula fit
+    ├── validation.py  # realism / diversity / PII scoring
+    └── planner.py     # NL → schema (system prompt + keyword fallback)
 ```
 
 ## Endpoints
