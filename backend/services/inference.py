@@ -66,6 +66,10 @@ def col_stats(series: pd.Series, col_type: str) -> dict[str, Any]:
             min=float(series.min()),
             max=float(series.max()),
             skew=float(series.skew() if len(series) > 2 else 0),
+            #adding this for tail preservation
+            p90=float(series.quantile(0.90)),
+            p95=float(series.quantile(0.95)),
+            p99=float(series.quantile(0.99)),
         )
     elif col_type == "enum":
         vc = series.value_counts(normalize=True)
