@@ -20,10 +20,22 @@ export interface EdgeCaseCoverage {
   coveragePct: number;
 }
 
+export interface EdgeCaseResult {
+  description: string;
+  parsed: boolean;
+  targetPct: number;
+  actualPct: number | null;
+  targetCount?: number;
+  actualCount?: number;
+  satisfied: boolean;
+  error?: string;
+}
+
 export interface ValidationReport {
   verdict: string;
   verdictStatus: ValidationStatus;
   edgeCaseCoverage?: EdgeCaseCoverage;
+  edgeCases?: EdgeCaseResult[];
   metrics: ValidationMetric[];
   columns: ValidationColumnResult[];
   insights: string[];

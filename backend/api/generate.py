@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 
 from core.state import sessions
 from models.schemas import GenerateRequest
+from services.edge_cases import apply_edge_cases, parse_edge_cases
 from services.synthesis import synthesize
 from services.validation import validate
 
@@ -18,6 +19,8 @@ router = APIRouter(prefix="/api")
 async def preview_dataset(req: GenerateRequest):
     """Generate 10 preview rows as a JSON array — no session stored."""
     synth_df = synthesize(req.schema_columns, req.source_stats, n=10, model_id=req.model_id)
+    rules = parse_edge_cases(req.edge_cases, req.schema_columns)
+    synth_df, _ = apply_edge_cases(synth_df, rules, req.source_stats)
     return {"rows": synth_df.to_dict(orient="records")}
 
 
@@ -26,6 +29,9 @@ async def generate(req: GenerateRequest):
     """Synthesise rows, run fidelity validation, and stash the file for download."""
     n = max(1, min(req.row_count, 100_000))
     synth_df = synthesize(req.schema_columns, req.source_stats, n, model_id=req.model_id)
+
+    rules = parse_edge_cases(req.edge_cases, req.schema_columns)
+    synth_df, edge_case_report = apply_edge_cases(synth_df, rules, req.source_stats)
 
     fmt = (req.format or "csv").lower()
     if fmt not in ("csv", "jsonl", "parquet"):
@@ -45,6 +51,25 @@ async def generate(req: GenerateRequest):
     sessions[session_id] = {"bytes": data_bytes, "format": fmt}
 
     validation = validate(req.source_stats, synth_df)
+    validation["edgeCases"] = edge_case_report
+    if edge_case_report:
+        unmet = [r for r in edge_case_report if r["parsed"] and not r["satisfied"]]
+        unparsed = [r for r in edge_case_report if not r["parsed"]]
+        if unmet:
+            validation["insights"].append(
+                f"Edge case '{unmet[0]['description']}' fell short of its target — "
+                f"{unmet[0]['actualPct']}% vs {unmet[0]['targetPct']}% requested"
+            )
+        if unparsed:
+            validation["insights"].append(
+                f"{len(unparsed)} edge case{'s' if len(unparsed) > 1 else ''} could not be parsed — "
+                "rephrase using exact column names (e.g. 'hba1c > 12')"
+            )
+        if not unmet and not unparsed:
+            met = len(edge_case_report)
+            validation["insights"].append(
+                f"All {met} edge case{'s' if met > 1 else ''} enforced at requested coverage"
+            )
     file_size_kb = round(len(data_bytes) / 1024, 1)
     filename = f"aperture_output.{fmt}"
 

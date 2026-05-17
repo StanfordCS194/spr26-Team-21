@@ -29,12 +29,24 @@ export interface ValidationColumnResult {
   note?: string;
 }
 
+export interface EdgeCaseResult {
+  description: string;
+  parsed: boolean;
+  targetPct: number;
+  actualPct: number | null;
+  targetCount?: number;
+  actualCount?: number;
+  satisfied: boolean;
+  error?: string;
+}
+
 export interface ValidationReportData {
   verdict: string;
   verdictStatus: 'pass' | 'warn' | 'fail';
   metrics: ValidationMetric[];
   columns: ValidationColumnResult[];
   insights: string[];
+  edgeCases?: EdgeCaseResult[];
 }
 
 export interface GenerateResponse {

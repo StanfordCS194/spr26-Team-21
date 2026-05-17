@@ -653,6 +653,80 @@
   color: var(--text-dim);
 }
 
+/* Edge case enforcement (per-rule) */
+.ws-edge-cases {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ws-edge-cases-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.ws-edge-case-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ws-edge-case-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.ws-edge-case-desc {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-edge-case-bar-track {
+  position: relative;
+  height: 5px;
+  background: var(--bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.ws-edge-case-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s ease;
+}
+
+.ws-edge-case-target-marker {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 9px;
+  background: var(--text-dim);
+  transform: translateX(-1px);
+}
+
+.ws-edge-case-count {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+}
+
+.ws-edge-case-error {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 /* Metrics row */
 .ws-validation-metrics {
   display: grid;
