@@ -2,14 +2,16 @@
 import io
 import json
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 from core.state import sessions
 from models.schemas import GenerateRequest
 from services.edge_cases import apply_edge_cases, parse_edge_cases
 from services.synthesis import synthesize
+from services.trust_report import render_html_report
 from services.validation import validate
 
 router = APIRouter(prefix="/api")
@@ -47,9 +49,6 @@ async def generate(req: GenerateRequest):
         synth_df.to_csv(buf, index=False)
         data_bytes = buf.getvalue()
 
-    session_id = str(uuid.uuid4())
-    sessions[session_id] = {"bytes": data_bytes, "format": fmt}
-
     validation = validate(req.source_stats, synth_df)
     validation["edgeCases"] = edge_case_report
     if edge_case_report:
@@ -73,6 +72,22 @@ async def generate(req: GenerateRequest):
     file_size_kb = round(len(data_bytes) / 1024, 1)
     filename = f"aperture_output.{fmt}"
 
+    created_at = datetime.now(timezone.utc).isoformat()
+    session_id = str(uuid.uuid4())
+    sessions[session_id] = {
+        "bytes": data_bytes,
+        "format": fmt,
+        "prompt": req.prompt,
+        "schema": [dict(c) for c in req.schema_columns],
+        "source_stats": req.source_stats,
+        "edge_cases_requested": list(req.edge_cases),
+        "validation": validation,
+        "row_count": n,
+        "file_size_kb": file_size_kb,
+        "filename": filename,
+        "created_at": created_at,
+    }
+
     return {
         "session_id": session_id,
         "row_count": n,
@@ -80,6 +95,7 @@ async def generate(req: GenerateRequest):
         "format": fmt,
         "filename": filename,
         "validation": validation,
+        "created_at": created_at,
     }
 
 
@@ -105,3 +121,34 @@ async def download(session_id: str):
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/report/{session_id}", response_class=HTMLResponse)
+async def trust_report(session_id: str):
+    """Stakeholder-facing trust report — printable HTML, Cmd+P → PDF."""
+    entry = sessions.get(session_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Session not found or expired")
+    html = render_html_report({**entry, "session_id": session_id})
+    return HTMLResponse(content=html)
+
+
+@router.get("/manifest/{session_id}")
+async def manifest(session_id: str):
+    """Provenance manifest for a generated dataset — what was asked for, what was produced."""
+    entry = sessions.get(session_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Session not found or expired")
+
+    return {
+        "session_id": session_id,
+        "created_at": entry.get("created_at"),
+        "prompt": entry.get("prompt", ""),
+        "row_count": entry.get("row_count"),
+        "format": entry.get("format"),
+        "filename": entry.get("filename"),
+        "file_size_kb": entry.get("file_size_kb"),
+        "schema": entry.get("schema", []),
+        "edge_cases_requested": entry.get("edge_cases_requested", []),
+        "validation": entry.get("validation", {}),
+    }

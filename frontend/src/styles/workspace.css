@@ -542,6 +542,23 @@
   cursor: not-allowed;
 }
 
+.ws-download-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ws-download-btn-secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.ws-download-btn-secondary:hover {
+  background: var(--surface);
+  opacity: 1;
+}
+
 .ws-gen-error {
   font-size: 12px;
   color: #e07070;

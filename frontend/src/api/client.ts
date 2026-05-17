@@ -151,6 +151,10 @@ export function downloadUrl(sessionId: string): string {
   return `${BASE}/download/${sessionId}`;
 }
 
+export function reportUrl(sessionId: string): string {
+  return `${BASE}/report/${sessionId}`;
+}
+
 export interface MongoTestResponse {
   ok: boolean;
   host?: string;
