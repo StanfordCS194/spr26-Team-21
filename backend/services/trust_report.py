@@ -155,6 +155,31 @@ def derive_risks(validation: dict, source_stats: dict | None = None) -> list[dic
                       "Remove or redact these columns before sharing externally.",
         })
 
+    duplicates = validation.get("duplicates") or {}
+    if duplicates.get("status") == "fail":
+        risks.append({
+            "severity": "critical",
+            "title": f"{duplicates['count']:,} duplicate rows ({duplicates['pct']}%)",
+            "detail": "A high duplicate rate suggests the synthesiser is collapsing onto a small "
+                      "set of values. The dataset will not provide the diversity expected of "
+                      "its row count.",
+        })
+    elif duplicates.get("status") == "warn":
+        risks.append({
+            "severity": "warn",
+            "title": f"{duplicates['count']:,} duplicate rows ({duplicates['pct']}%)",
+            "detail": "Some duplication is expected, but this rate is above the comfort threshold. "
+                      "Review low-cardinality columns or increase variance in source statistics.",
+        })
+
+    for issue in validation.get("diversityIssues", []) or []:
+        sev = "critical" if issue.get("status") == "fail" else "warn"
+        risks.append({
+            "severity": sev,
+            "title": f"Low diversity in '{issue['column']}'",
+            "detail": issue.get("detail", "Column shows insufficient variation."),
+        })
+
     if not has_source:
         risks.append({
             "severity": "warn",
@@ -211,6 +236,21 @@ def derive_next_steps(validation: dict, source_stats: dict | None = None) -> lis
 
     if safety < 90:
         steps.append("Remove or redact PII-flagged columns before sharing the dataset externally.")
+
+    duplicates = validation.get("duplicates") or {}
+    if duplicates.get("status") in ("warn", "fail"):
+        steps.append(
+            "Investigate low-cardinality columns and consider increasing source variance or "
+            "row count to reduce duplicate generation."
+        )
+
+    constant_cols = [i["column"] for i in validation.get("diversityIssues", []) if i.get("status") == "fail"]
+    if constant_cols:
+        names = ", ".join(f"'{c}'" for c in constant_cols[:2])
+        steps.append(
+            f"Column{'s' if len(constant_cols) > 1 else ''} {names} collapsed to a single value — "
+            "refit with more source rows or remove from the schema."
+        )
 
     if not has_source:
         steps.append(

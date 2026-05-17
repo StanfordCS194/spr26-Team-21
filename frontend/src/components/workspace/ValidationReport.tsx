@@ -165,6 +165,36 @@ export default function ValidationReport({ report }: Props) {
         </div>
       )}
 
+      {(report.duplicates || (report.diversityIssues && report.diversityIssues.length > 0)) && (
+        <div className="ws-sanity-section">
+          <div className="ws-sanity-label">Distribution Sanity</div>
+          {report.duplicates && (
+            <div className={`ws-sanity-row ws-sanity-${report.duplicates.status}`}>
+              <span className="ws-sanity-name">Duplicate rows</span>
+              <span className="ws-sanity-value">
+                {report.duplicates.count.toLocaleString()} ({report.duplicates.pct}%)
+              </span>
+              <span className={`ws-validation-badge ws-validation-badge-${report.duplicates.status}`}>
+                {report.duplicates.status === 'pass'
+                  ? 'OK'
+                  : report.duplicates.status === 'warn'
+                    ? 'Elevated'
+                    : 'High'}
+              </span>
+            </div>
+          )}
+          {report.diversityIssues?.map((issue, i) => (
+            <div key={i} className={`ws-sanity-row ws-sanity-${issue.status}`}>
+              <span className="ws-sanity-name">{issue.column}</span>
+              <span className="ws-sanity-value">{issue.detail}</span>
+              <span className={`ws-validation-badge ws-validation-badge-${issue.status}`}>
+                {issue.issue === 'constant' ? 'Constant' : 'Mode-dominant'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="ws-validation-insights">
         <div className="ws-validation-insights-label">Key Insights</div>
         {report.insights.map((insight, i) => (

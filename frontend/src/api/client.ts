@@ -40,6 +40,19 @@ export interface EdgeCaseResult {
   error?: string;
 }
 
+export interface DuplicatesCheck {
+  count: number;
+  pct: number;
+  status: 'pass' | 'warn' | 'fail';
+}
+
+export interface DiversityIssue {
+  column: string;
+  issue: 'constant' | 'mode_dominance';
+  detail: string;
+  status: 'pass' | 'warn' | 'fail';
+}
+
 export interface ValidationReportData {
   verdict: string;
   verdictStatus: 'pass' | 'warn' | 'fail';
@@ -47,6 +60,8 @@ export interface ValidationReportData {
   columns: ValidationColumnResult[];
   insights: string[];
   edgeCases?: EdgeCaseResult[];
+  duplicates?: DuplicatesCheck;
+  diversityIssues?: DiversityIssue[];
 }
 
 export interface GenerateResponse {

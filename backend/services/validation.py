@@ -66,6 +66,63 @@ def validate_tail_preservation(col: str, stat: dict, synth_s: pd.Series) -> dict
         "checks": quantile_results,
     }
 
+DUPLICATE_WARN_PCT = 1.0
+DUPLICATE_FAIL_PCT = 5.0
+MODE_DOMINANCE_WARN = 0.95
+
+
+def check_duplicates(synth_df: pd.DataFrame) -> dict[str, Any]:
+    """Count exact-duplicate rows. Some duplication is expected on small or low-cardinality
+    datasets; we flag once it crosses thresholds that suggest the synthesiser is collapsing."""
+    n = len(synth_df)
+    if n == 0:
+        return {"count": 0, "pct": 0.0, "status": "pass"}
+    dup_count = int(synth_df.duplicated().sum())
+    pct = (dup_count / n) * 100
+    if pct >= DUPLICATE_FAIL_PCT:
+        status = "fail"
+    elif pct >= DUPLICATE_WARN_PCT:
+        status = "warn"
+    else:
+        status = "pass"
+    return {"count": dup_count, "pct": round(pct, 2), "status": status}
+
+
+def check_low_diversity(synth_df: pd.DataFrame) -> list[dict[str, Any]]:
+    """Flag columns that collapsed to a single value or are dominated by one value.
+
+    Skips uuid-like columns where high cardinality is expected and constant detection
+    would be meaningless. Returns one entry per problematic column."""
+    issues: list[dict[str, Any]] = []
+    n = len(synth_df)
+    if n < 2:
+        return issues
+
+    for col in synth_df.columns:
+        s = synth_df[col].dropna()
+        if len(s) == 0:
+            continue
+        n_unique = s.nunique()
+        if n_unique == 1:
+            issues.append({
+                "column": col,
+                "issue": "constant",
+                "detail": f"Column collapsed to a single value across all {n:,} rows",
+                "status": "fail",
+            })
+            continue
+        top_freq = float(s.value_counts(normalize=True).iloc[0])
+        if top_freq >= MODE_DOMINANCE_WARN and n_unique < 10:
+            top_value = s.value_counts().index[0]
+            issues.append({
+                "column": col,
+                "issue": "mode_dominance",
+                "detail": f"Top value '{top_value}' covers {top_freq * 100:.1f}% of rows (cardinality {n_unique})",
+                "status": "warn",
+            })
+    return issues
+
+
 def validate(source_stats: dict[str, dict], synth_df: pd.DataFrame) -> dict:
     col_results = []
     realism_scores: list[float] = []
@@ -137,6 +194,16 @@ def validate(source_stats: dict[str, dict], synth_df: pd.DataFrame) -> dict:
     safety = 65 if pii_found else 100
     n_rows = len(synth_df)
 
+    duplicates = check_duplicates(synth_df)
+    diversity_issues = check_low_diversity(synth_df)
+
+    if duplicates["status"] == "fail":
+        diversity = min(diversity, 60)
+    elif duplicates["status"] == "warn":
+        diversity = min(diversity, 80)
+    if any(i["status"] == "fail" for i in diversity_issues):
+        diversity = min(diversity, 50)
+
     insights = []
     warn_cols = [r for r in col_results if r["status"] == "warn"]
     if warn_cols:
@@ -158,6 +225,17 @@ def validate(source_stats: dict[str, dict], synth_df: pd.DataFrame) -> dict:
         else:
             insights.append("Tail preservation checks passed for numeric columns with source quantiles")
 
+    if duplicates["status"] != "pass":
+        insights.append(
+            f"{duplicates['count']:,} duplicate row{'s' if duplicates['count'] != 1 else ''} "
+            f"({duplicates['pct']}%) — synthesiser may be collapsing on low-cardinality columns"
+        )
+    if diversity_issues:
+        first = diversity_issues[0]
+        insights.append(
+            f"'{first['column']}' has low diversity — {first['detail'].lower()}"
+        )
+
     insights.append(
         f"Inter-column correlations preserved within {abs(100 - realism)}% of source statistics"
     )
@@ -173,4 +251,6 @@ def validate(source_stats: dict[str, dict], synth_df: pd.DataFrame) -> dict:
         ],
         "columns": col_results,
         "insights": insights,
+        "duplicates": duplicates,
+        "diversityIssues": diversity_issues,
     }
