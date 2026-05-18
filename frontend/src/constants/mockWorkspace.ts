@@ -20,10 +20,37 @@ export interface EdgeCaseCoverage {
   coveragePct: number;
 }
 
+export interface EdgeCaseResult {
+  description: string;
+  parsed: boolean;
+  targetPct: number;
+  actualPct: number | null;
+  targetCount?: number;
+  actualCount?: number;
+  satisfied: boolean;
+  error?: string;
+}
+
+export interface DuplicatesCheck {
+  count: number;
+  pct: number;
+  status: ValidationStatus;
+}
+
+export interface DiversityIssue {
+  column: string;
+  issue: 'constant' | 'mode_dominance';
+  detail: string;
+  status: ValidationStatus;
+}
+
 export interface ValidationReport {
   verdict: string;
   verdictStatus: ValidationStatus;
   edgeCaseCoverage?: EdgeCaseCoverage;
+  edgeCases?: EdgeCaseResult[];
+  duplicates?: DuplicatesCheck;
+  diversityIssues?: DiversityIssue[];
   metrics: ValidationMetric[];
   columns: ValidationColumnResult[];
   insights: string[];

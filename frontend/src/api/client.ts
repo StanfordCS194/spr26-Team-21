@@ -29,12 +29,39 @@ export interface ValidationColumnResult {
   note?: string;
 }
 
+export interface EdgeCaseResult {
+  description: string;
+  parsed: boolean;
+  targetPct: number;
+  actualPct: number | null;
+  targetCount?: number;
+  actualCount?: number;
+  satisfied: boolean;
+  error?: string;
+}
+
+export interface DuplicatesCheck {
+  count: number;
+  pct: number;
+  status: 'pass' | 'warn' | 'fail';
+}
+
+export interface DiversityIssue {
+  column: string;
+  issue: 'constant' | 'mode_dominance';
+  detail: string;
+  status: 'pass' | 'warn' | 'fail';
+}
+
 export interface ValidationReportData {
   verdict: string;
   verdictStatus: 'pass' | 'warn' | 'fail';
   metrics: ValidationMetric[];
   columns: ValidationColumnResult[];
   insights: string[];
+  edgeCases?: EdgeCaseResult[];
+  duplicates?: DuplicatesCheck;
+  diversityIssues?: DiversityIssue[];
 }
 
 export interface GenerateResponse {
@@ -137,6 +164,10 @@ export async function generate(
 
 export function downloadUrl(sessionId: string): string {
   return `${BASE}/download/${sessionId}`;
+}
+
+export function reportUrl(sessionId: string): string {
+  return `${BASE}/report/${sessionId}`;
 }
 
 export interface MongoTestResponse {

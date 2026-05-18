@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Check, ChevronDown } from '../icons/Icons';
-import type { ValidationReport as ValidationReportType } from '../../constants/mockWorkspace';
+import type { ValidationReport as ValidationReportType, ValidationStatus } from '../../constants/mockWorkspace';
 
 interface Props {
   report: ValidationReportType;
@@ -111,6 +111,85 @@ export default function ValidationReport({ report }: Props) {
               {col.note && (
                 <span className="ws-validation-col-note">{col.note}</span>
               )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {report.edgeCases && report.edgeCases.length > 0 && (
+        <div className="ws-edge-cases">
+          <div className="ws-edge-cases-label">Edge Case Enforcement</div>
+          {report.edgeCases.map((ec, i) => {
+            const status: ValidationStatus = !ec.parsed
+              ? 'warn'
+              : ec.satisfied
+                ? 'pass'
+                : 'fail';
+            const pct = ec.actualPct ?? 0;
+            const target = ec.targetPct;
+            return (
+              <div key={i} className="ws-edge-case-row">
+                <div className="ws-edge-case-top">
+                  <span className="ws-edge-case-desc">{ec.description}</span>
+                  <span className={`ws-validation-badge ws-validation-badge-${status}`}>
+                    {!ec.parsed ? 'Unparsed' : ec.satisfied ? 'Met' : 'Short'}
+                  </span>
+                </div>
+                {ec.parsed ? (
+                  <>
+                    <div className="ws-edge-case-bar-track">
+                      <div
+                        className={`ws-edge-case-bar ws-validation-bar-${status}`}
+                        style={{
+                          width: animated ? `${Math.min(100, (pct / Math.max(target, 0.01)) * 100)}%` : '0%',
+                        }}
+                      />
+                      <div
+                        className="ws-edge-case-target-marker"
+                        style={{ left: '100%' }}
+                      />
+                    </div>
+                    <div className="ws-edge-case-count">
+                      {ec.actualCount?.toLocaleString() ?? '—'} of{' '}
+                      {ec.targetCount?.toLocaleString() ?? '—'} target rows ({pct}% / {target}%)
+                    </div>
+                  </>
+                ) : (
+                  <div className="ws-edge-case-error">
+                    {ec.error ?? 'Could not parse — consider rephrasing with column names'}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {(report.duplicates || (report.diversityIssues && report.diversityIssues.length > 0)) && (
+        <div className="ws-sanity-section">
+          <div className="ws-sanity-label">Distribution Sanity</div>
+          {report.duplicates && (
+            <div className={`ws-sanity-row ws-sanity-${report.duplicates.status}`}>
+              <span className="ws-sanity-name">Duplicate rows</span>
+              <span className="ws-sanity-value">
+                {report.duplicates.count.toLocaleString()} ({report.duplicates.pct}%)
+              </span>
+              <span className={`ws-validation-badge ws-validation-badge-${report.duplicates.status}`}>
+                {report.duplicates.status === 'pass'
+                  ? 'OK'
+                  : report.duplicates.status === 'warn'
+                    ? 'Elevated'
+                    : 'High'}
+              </span>
+            </div>
+          )}
+          {report.diversityIssues?.map((issue, i) => (
+            <div key={i} className={`ws-sanity-row ws-sanity-${issue.status}`}>
+              <span className="ws-sanity-name">{issue.column}</span>
+              <span className="ws-sanity-value">{issue.detail}</span>
+              <span className={`ws-validation-badge ws-validation-badge-${issue.status}`}>
+                {issue.issue === 'constant' ? 'Constant' : 'Mode-dominant'}
+              </span>
             </div>
           ))}
         </div>

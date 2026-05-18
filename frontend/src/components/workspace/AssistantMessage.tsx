@@ -8,13 +8,14 @@ import SchemaInferenceProgress from './SchemaInferenceProgress';
 import ValidationReport from './ValidationReport';
 import ClarifyingQuestions from './ClarifyingQuestions';
 import PreviewTable from './PreviewTable';
-import { Download } from '../icons/Icons';
+import { Download, FileIcon } from '../icons/Icons';
 import type { WorkspaceMessage, ApprovalState } from '../../constants/mockWorkspace';
 import { VALIDATION_REPORT } from '../../constants/mockWorkspace';
 import {
   generate,
   previewDataset,
   downloadUrl,
+  reportUrl,
   type GenerateResponse,
   type SourceStats,
 } from '../../api/client';
@@ -260,19 +261,36 @@ export default function AssistantMessage({
                           </span>
                         </div>
                         {genResult ? (
-                          <a
-                            className="ws-download-btn"
-                            href={downloadUrl(genResult.session_id)}
-                            download
-                          >
-                            <Download size={13} />
-                            Download
-                          </a>
+                          <div className="ws-download-actions">
+                            <a
+                              className="ws-download-btn ws-download-btn-secondary"
+                              href={reportUrl(genResult.session_id)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <FileIcon size={13} />
+                              Trust Report
+                            </a>
+                            <a
+                              className="ws-download-btn"
+                              href={downloadUrl(genResult.session_id)}
+                              download
+                            >
+                              <Download size={13} />
+                              Download
+                            </a>
+                          </div>
                         ) : (
-                          <button className="ws-download-btn" disabled>
-                            <Download size={13} />
-                            Download
-                          </button>
+                          <div className="ws-download-actions">
+                            <button className="ws-download-btn ws-download-btn-secondary" disabled>
+                              <FileIcon size={13} />
+                              Trust Report
+                            </button>
+                            <button className="ws-download-btn" disabled>
+                              <Download size={13} />
+                              Download
+                            </button>
+                          </div>
                         )}
                       </div>
                       <ValidationReport report={report} />
