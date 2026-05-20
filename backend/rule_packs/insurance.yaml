@@ -1,0 +1,57 @@
+pack: insurance
+version: 1
+description: Auto/property insurance claim domain rules. Violations in real claims are documented fraud indicators (CAIF tier-1 red flags).
+sources:
+  - Coalition Against Insurance Fraud, "Build a Better Mousetrap" (2022)
+  - NICB Red Flags
+  - ISO ClaimSearch documented fraud signals
+
+rules:
+  - id: C1_claim_sum
+    severity: hard
+    description: injury_claim + property_claim + vehicle_claim must equal total_claim_amount
+    columns: [injury_claim, property_claim, vehicle_claim, total_claim_amount]
+    check: "abs(injury_claim + property_claim + vehicle_claim - total_claim_amount) <= 1"
+    repair: rescale_components_to_total
+
+  - id: C2_nonneg_claims
+    severity: hard
+    description: All claim amounts must be non-negative
+    columns: [injury_claim, property_claim, vehicle_claim, total_claim_amount]
+    check: "min(injury_claim, property_claim, vehicle_claim, total_claim_amount) >= 0"
+    repair: clip_to_zero
+
+  - id: C10_collision_type
+    severity: hard
+    description: Vehicle Theft and Parked Car incidents cannot have a collision_type
+    columns: [incident_type, collision_type]
+    check: "incident_type not in ('Vehicle Theft', 'Parked Car') or collision_type in ('?', '', None)"
+    repair: clear_collision_type_for_non_collision
+
+  - id: C11_property_damage
+    severity: hard
+    description: property_damage=YES implies property_claim > 0
+    columns: [property_damage, property_claim]
+    check: "property_damage != 'YES' or property_claim > 0"
+    repair: set_property_claim_to_median
+
+  - id: C12_bodily_injury
+    severity: hard
+    description: bodily_injuries=0 implies injury_claim=0; bodily_injuries>0 implies injury_claim>0
+    columns: [bodily_injuries, injury_claim]
+    check: "(bodily_injuries == 0 and injury_claim == 0) or (bodily_injuries > 0 and injury_claim > 0)"
+    repair: align_injury_claim_with_bodily_injuries
+
+  - id: C13_single_vehicle_count
+    severity: hard
+    description: Single Vehicle Collision implies number_of_vehicles_involved = 1
+    columns: [incident_type, number_of_vehicles_involved]
+    check: "incident_type != 'Single Vehicle Collision' or number_of_vehicles_involved == 1"
+    repair: set_vehicle_count_to_one
+
+  - id: C22_age_range
+    severity: hard
+    description: Driver age must be in plausible licensed-driver range [16, 100]
+    columns: [age]
+    check: "16 <= age <= 100"
+    repair: clip_age

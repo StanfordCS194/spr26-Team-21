@@ -7,11 +7,14 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 
-from core.state import sessions
+from core.state import sdv_models, sessions
 from models.schemas import GenerateRequest
 from services.edge_cases import apply_edge_cases, parse_edge_cases
+from services.llm_auditor import audit_sample
+from services.rule_packs import apply_pack
 from services.synthesis import synthesize
 from services.trust_report import render_html_report
+from services.utility import compute_utility
 from services.validation import validate
 
 router = APIRouter(prefix="/api")
@@ -28,12 +31,18 @@ async def preview_dataset(req: GenerateRequest):
 
 @router.post("/generate")
 async def generate(req: GenerateRequest):
-    """Synthesise rows, run fidelity validation, and stash the file for download."""
+    """Synthesise → edge cases → rule pack → validate → utility → audit → stash for download."""
     n = max(1, min(req.row_count, 100_000))
     synth_df = synthesize(req.schema_columns, req.source_stats, n, model_id=req.model_id)
 
+    # Edge-case enforcement (e.g. "10% of rows have hba1c > 12").
     rules = parse_edge_cases(req.edge_cases, req.schema_columns)
     synth_df, edge_case_report = apply_edge_cases(synth_df, rules, req.source_stats)
+
+    # Domain rule pack: detect (insurance/clinical), check, repair, recheck.
+    rule_report = apply_pack(synth_df)
+    if rule_report is not None:
+        synth_df = rule_report.pop("repaired_df")
 
     fmt = (req.format or "csv").lower()
     if fmt not in ("csv", "jsonl", "parquet"):
@@ -69,6 +78,14 @@ async def generate(req: GenerateRequest):
             validation["insights"].append(
                 f"All {met} edge case{'s' if met > 1 else ''} enforced at requested coverage"
             )
+
+    # TRTR/TSTR/TR+STR utility against a real held-out split. Requires retained source_df.
+    real_df = sdv_models.get(req.model_id, {}).get("source_df") if req.model_id else None
+    utility = compute_utility(real_df, synth_df, label_col=req.label_col)
+
+    # Semantic auditor (heuristic stub; LLM hook in services/llm_auditor.py).
+    audit = audit_sample(synth_df, rule_pack_report=rule_report, use_llm=False)
+
     file_size_kb = round(len(data_bytes) / 1024, 1)
     filename = f"aperture_output.{fmt}"
 
@@ -95,6 +112,9 @@ async def generate(req: GenerateRequest):
         "format": fmt,
         "filename": filename,
         "validation": validation,
+        "utility": utility,
+        "rule_pack": rule_report,
+        "audit": audit,
         "created_at": created_at,
     }
 

@@ -14,3 +14,7 @@ venv/
 node_modules/
 dist/
 .DS_Store
+
+# Experimental data (large CSVs, not for version control)
+experimental/data/
+experimental/*.csv

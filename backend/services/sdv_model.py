@@ -56,7 +56,8 @@ def fit_sdv_model(df: pd.DataFrame, col_info: list[dict]) -> str | None:
         synthesizer.fit(df_fit)
 
         model_id = str(uuid.uuid4())
-        sdv_models[model_id] = {"synthesizer": synthesizer, "sdv_cols": col_names}
+        # Retain a sample of the source frame for downstream Utility (TSTR) evaluation.
+        sdv_models[model_id] = {"synthesizer": synthesizer, "sdv_cols": col_names, "source_df": df_fit.copy()}
 
         # Simple LRU eviction: keep at most 50 models in memory
         if len(sdv_models) > 50:

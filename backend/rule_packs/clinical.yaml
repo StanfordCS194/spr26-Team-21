@@ -1,0 +1,35 @@
+pack: clinical
+version: 1
+description: Clinical / EHR domain rules. Catches biologically impossible synthetic patient records.
+sources:
+  - HIPAA quasi-identifier guidance
+  - Common clinical data dictionaries (LOINC, ICD-10)
+
+rules:
+  - id: CL1_hba1c_diabetes
+    severity: soft
+    description: HbA1c >= 6.5 strongly implies a diabetes diagnosis (ADA criterion)
+    columns: [hba1c, diagnosis]
+    check: "hba1c < 6.5 or 'diabet' in str(diagnosis).lower()"
+    repair: none
+
+  - id: CL2_male_no_pregnancy
+    severity: hard
+    description: Male patients cannot have pregnancy-related diagnosis codes
+    columns: [sex, diagnosis]
+    check: "sex != 'M' or 'pregnan' not in str(diagnosis).lower()"
+    repair: clear_pregnancy_for_male
+
+  - id: CL3_age_pediatric
+    severity: soft
+    description: Adult diagnoses on age < 1 record are implausible
+    columns: [age, diagnosis]
+    check: "age >= 1 or 'pediatric' in str(diagnosis).lower() or 'neonat' in str(diagnosis).lower()"
+    repair: none
+
+  - id: CL4_nonneg_vitals
+    severity: hard
+    description: Vital signs must be physiologically non-negative
+    columns: [heart_rate, blood_pressure_systolic, temperature]
+    check: "min(heart_rate, blood_pressure_systolic, temperature) >= 0"
+    repair: clip_to_zero
