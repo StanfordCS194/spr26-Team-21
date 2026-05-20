@@ -65,7 +65,166 @@ def validate_tail_preservation(col: str, stat: dict, synth_s: pd.Series) -> dict
         "status": status,
         "checks": quantile_results,
     }
+#helper func that does per col drift using Kolmogorov–Smirnov test
+#currently inactive, did not call in validate as we need validate() to have source_df as input
+#once source_df is set into validate() we can use this to compare real vs synthetic numeric dist
+def validate_ks_per_column_drift(
+    col: str,
+    source_df: pd.DataFrame | None,
+    synth_s: pd.Series,
+) -> dict[str, Any] | None:
+    if source_df is None or col not in source_df.columns or synth_s.empty:
+        return None
 
+    try:
+        from scipy.stats import ks_2samp
+    except ImportError:
+        return {
+            "column": col,
+            "status": "warn",
+            "note": "scipy is not installed; KS test could not run",
+        }
+
+    source_s = pd.to_numeric(source_df[col], errors="coerce").dropna()
+    synth_numeric = pd.to_numeric(synth_s, errors="coerce").dropna()
+
+    if len(source_s) < 2 or len(synth_numeric) < 2:
+        return None
+
+    ks_stat, p_value = ks_2samp(source_s, synth_numeric)
+
+    if p_value < 0.01:
+        status = "fail"
+    elif p_value < 0.05:
+        status = "warn"
+    else:
+        status = "pass"
+
+    return {
+        "column": col,
+        "ksStat": round(float(ks_stat), 4),
+        "pValue": round(float(p_value), 6),
+        "status": status,
+    }
+#another helper func that tests inter column correlation using mutual info score
+#function is not called yet not until we have a source_df
+def validate_mutual_information_relationships(
+    source_df: pd.DataFrame | None,
+    synth_df: pd.DataFrame,
+    max_pairs: int = 50,
+) -> dict[str, Any] | None:
+    """Future-ready pairwise Mutual Information validation.
+    Purpose:
+    - Compare inter-column relationships in source vs. synthetic data.
+    - Uses normalized mutual information, which can capture nonlinear and categorical relationships.
+    """
+    if source_df is None or source_df.empty or synth_df.empty:
+        return None
+
+    try:
+        from sklearn.metrics import normalized_mutual_info_score
+    except ImportError:
+        return {
+            "status": "warn",
+            "note": "scikit-learn is not installed; mutual information validation could not run",
+        }
+
+    shared_cols = [col for col in source_df.columns if col in synth_df.columns]
+    if len(shared_cols) < 2:
+        return None
+
+    def discretize_series(s: pd.Series) -> pd.Series:
+        """Convert numeric/categorical values into comparable discrete bins."""
+        s = s.dropna()
+
+        if pd.api.types.is_numeric_dtype(s):
+            # qcut gives quantile bins, which helps compare nonlinear relationships safely.
+            try:
+                return pd.qcut(s, q=min(10, max(2, s.nunique())), duplicates="drop").astype(str)
+            except Exception:
+                return s.astype(str)
+
+        return s.astype(str)
+
+    pair_results = []
+    drift_scores: list[float] = []
+
+    pairs_checked = 0
+    for i, col_a in enumerate(shared_cols):
+        for col_b in shared_cols[i + 1:]:
+            if pairs_checked >= max_pairs:
+                break
+
+            source_pair = source_df[[col_a, col_b]].dropna()
+            synth_pair = synth_df[[col_a, col_b]].dropna()
+
+            if len(source_pair) < 5 or len(synth_pair) < 5:
+                continue
+
+            source_a = discretize_series(source_pair[col_a])
+            source_b = discretize_series(source_pair[col_b])
+            synth_a = discretize_series(synth_pair[col_a])
+            synth_b = discretize_series(synth_pair[col_b])
+
+            # Align lengths after discretization/dropna.
+            source_len = min(len(source_a), len(source_b))
+            synth_len = min(len(synth_a), len(synth_b))
+            if source_len < 5 or synth_len < 5:
+                continue
+
+            source_mi = normalized_mutual_info_score(
+                source_a.iloc[:source_len],
+                source_b.iloc[:source_len],
+            )
+            synth_mi = normalized_mutual_info_score(
+                synth_a.iloc[:synth_len],
+                synth_b.iloc[:synth_len],
+            )
+
+            drift = abs(float(source_mi) - float(synth_mi))
+            drift_scores.append(drift)
+
+            if drift >= 0.50:
+                status = "fail"
+            elif drift >= 0.25:
+                status = "warn"
+            else:
+                status = "pass"
+
+            pair_results.append(
+                {
+                    "columns": [col_a, col_b],
+                    "sourceMutualInformation": round(float(source_mi), 4),
+                    "syntheticMutualInformation": round(float(synth_mi), 4),
+                    "drift": round(drift, 4),
+                    "status": status,
+                }
+            )
+
+            pairs_checked += 1
+
+        if pairs_checked >= max_pairs:
+            break
+
+    if not pair_results:
+        return None
+
+    avg_drift = float(np.mean(drift_scores)) if drift_scores else 0.0
+    score = max(0, round(100 - avg_drift * 100))
+
+    if any(r["status"] == "fail" for r in pair_results):
+        status = "fail"
+    elif any(r["status"] == "warn" for r in pair_results):
+        status = "warn"
+    else:
+        status = "pass"
+
+    return {
+        "score": score,
+        "status": status,
+        "pairsChecked": len(pair_results),
+        "checks": pair_results,
+    }
 DUPLICATE_WARN_PCT = 1.0
 DUPLICATE_FAIL_PCT = 5.0
 MODE_DOMINANCE_WARN = 0.95
