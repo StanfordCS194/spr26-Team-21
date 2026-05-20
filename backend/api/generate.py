@@ -99,6 +99,9 @@ async def generate(req: GenerateRequest):
         "source_stats": req.source_stats,
         "edge_cases_requested": list(req.edge_cases),
         "validation": validation,
+        "utility": utility,
+        "rule_pack": rule_report,
+        "audit": audit,
         "row_count": n,
         "file_size_kb": file_size_kb,
         "filename": filename,
@@ -171,4 +174,7 @@ async def manifest(session_id: str):
         "schema": entry.get("schema", []),
         "edge_cases_requested": entry.get("edge_cases_requested", []),
         "validation": entry.get("validation", {}),
+        "utility": entry.get("utility"),
+        "rule_pack": entry.get("rule_pack"),
+        "audit": entry.get("audit"),
     }
