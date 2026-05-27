@@ -15,3 +15,4 @@ class GenerateRequest(BaseModel):
     format: str = "csv"  # csv | jsonl | parquet
     edge_cases: list[str] = []
     model_id: str | None = None  # SDV model fitted during /api/infer-schema
+    source_id: str | None = None  # Source dataframe stored during /api/infer-schema

@@ -41,6 +41,7 @@ export default function AssistantMessage({
   generationSpec,
   schemaSource,
   modelId,
+  sourceId,
 }: Props) {
   const [approval, setApproval] = useState<ApprovalState>(initialApproval ?? 'idle');
   const [genResult, setGenResult] = useState<GenerateResponse | null>(null);
@@ -105,6 +106,7 @@ export default function AssistantMessage({
         format,
         generationSpec?.edge_cases ?? [],
         modelId,
+        sourceId,
       );
       setApproval('validating');
       await new Promise<void>((r) => window.setTimeout(r, 800));

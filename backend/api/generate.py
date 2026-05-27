@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 
-from core.state import sessions
+from core.state import sessions, source_datasets
 from models.schemas import GenerateRequest
 from services.edge_cases import apply_edge_cases, parse_edge_cases
 from services.synthesis import synthesize
@@ -49,7 +49,8 @@ async def generate(req: GenerateRequest):
         synth_df.to_csv(buf, index=False)
         data_bytes = buf.getvalue()
 
-    validation = validate(req.source_stats, synth_df)
+    source_df = source_datasets.get(req.source_id) if req.source_id else None
+    validation = validate(req.source_stats, synth_df, source_df)
     validation["edgeCases"] = edge_case_report
     if edge_case_report:
         unmet = [r for r in edge_case_report if r["parsed"] and not r["satisfied"]]

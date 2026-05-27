@@ -5,3 +5,4 @@ Replace with S3 / a database for production deployments.
 
 sessions: dict[str, dict] = {}
 sdv_models: dict[str, dict] = {}
+source_datasets: dict[str, object] = {}
