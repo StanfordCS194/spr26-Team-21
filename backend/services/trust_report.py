@@ -529,6 +529,8 @@ def _render_diagnostics_section(diagnostics: dict | None) -> str:
     conf = diagnostics.get("confusion_matrices", {}) or {}
     observations = diagnostics.get("observations", []) or []
     recommendations = diagnostics.get("recommendations", []) or []
+    ablation = diagnostics.get("feature_ablation", []) or []
+    misclass = diagnostics.get("misclassification_overlap") or {}
 
     # Three confusion matrices side by side: TRTR / TSTR / TR+STR.
     matrix_specs = [
@@ -569,6 +571,79 @@ def _render_diagnostics_section(diagnostics: dict | None) -> str:
         )
     matrices_block = f'<div class="conf-matrices">{"".join(matrix_html)}</div>'
 
+    # Feature ablation — horizontal bar chart of recall delta per feature.
+    if ablation:
+        # Scale bars relative to the largest absolute delta in this run.
+        max_abs = max((abs(a["recall_delta_pct"]) for a in ablation), default=1.0) or 1.0
+        ab_rows = []
+        for a in ablation:
+            delta = a["recall_delta_pct"]
+            width = min(100, abs(delta) / max_abs * 100)
+            if delta >= 5:
+                tone = "pass"     # high reliance — useful feature
+            elif delta >= 1:
+                tone = "warn"
+            elif delta >= -1:
+                tone = "info"     # marginal
+            else:
+                tone = "fail"     # harmful
+            sign = "+" if delta >= 0 else ""
+            ab_rows.append(
+                f'<div class="abl-row">'
+                f'<div class="abl-name mono">{escape(a["feature"])}</div>'
+                f'<div class="abl-bar-track">'
+                f'<div class="abl-bar abl-bar-{tone}" style="width:{width}%"></div>'
+                f'</div>'
+                f'<div class="abl-delta num">{sign}{delta}pt</div>'
+                f'<div class="abl-tag muted">{escape(a["interpretation"])}</div>'
+                f'</div>'
+            )
+        ablation_block = (
+            '<div class="diag-subsection">'
+            '<h3>Feature Ablation (Augmented Model)</h3>'
+            '<div class="muted" style="margin-bottom:10px; font-size:11px;">'
+            'Recall drop when each top-importance feature is permuted in the test set. '
+            'Larger drops = model relies on that feature.'
+            '</div>'
+            '<div class="abl-list">' + "".join(ab_rows) + '</div>'
+            '</div>'
+        )
+    else:
+        ablation_block = ""
+
+    # Misclassification overlap — counts per bucket.
+    if misclass and misclass.get("counts"):
+        c = misclass["counts"]
+        buckets = [
+            ("Synthetic helps", c.get("trtr_only_wrong", 0), "pass",
+             "Test rows real-only got wrong but synthetic-only got right"),
+            ("Synthetic hurts", c.get("tstr_only_wrong", 0), "fail",
+             "Test rows real-only got right but synthetic-only got wrong"),
+            ("Both wrong", c.get("both_wrong", 0), "warn",
+             "Genuinely hard rows neither regime classifies correctly"),
+            ("Augmentation saves", c.get("augmentation_saves", 0), "pass",
+             "Augmented model correct where at least one base regime failed"),
+        ]
+        bucket_cards = "".join(
+            f'<div class="mc-card mc-card-{tone}">'
+            f'<div class="mc-name">{escape(name)}</div>'
+            f'<div class="mc-count">{count:,}</div>'
+            f'<div class="mc-desc muted">{escape(desc)}</div>'
+            f'</div>'
+            for name, count, tone, desc in buckets
+        )
+        misclass_block = (
+            '<div class="diag-subsection">'
+            '<h3>Row-Level Misclassification Overlap</h3>'
+            '<div class="muted" style="margin-bottom:10px; font-size:11px;">'
+            f'{escape(misclass.get("summary", ""))}'
+            '</div>'
+            f'<div class="mc-grid">{bucket_cards}</div>'
+            '</div>'
+        )
+    else:
+        misclass_block = ""
+
     obs_html = (
         '<ul class="diag-list">'
         + "".join(f'<li>{escape(o)}</li>' for o in observations)
@@ -588,6 +663,8 @@ def _render_diagnostics_section(diagnostics: dict | None) -> str:
         f'Each matrix shows model performance on the same {n_test:,} real test rows.'
         f'</div>'
         f'{matrices_block}'
+        f'{ablation_block}'
+        f'{misclass_block}'
         f'<div class="diag-subsection">'
         f'<h3>Observations</h3>'
         f'{obs_html}'
@@ -925,6 +1002,52 @@ def render_html_report(session: dict) -> str:
   }}
   .diag-list, .diag-list-num {{ margin: 0; padding-left: 20px; }}
   .diag-list li, .diag-list-num li {{ margin-bottom: 6px; font-size: 13px; }}
+  .abl-list {{ display: flex; flex-direction: column; gap: 6px; }}
+  .abl-row {{
+    display: grid;
+    grid-template-columns: 160px 1fr 70px 130px;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+  }}
+  .abl-name {{ font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+  .abl-bar-track {{
+    height: 8px;
+    background: var(--bg);
+    border-radius: 4px;
+    overflow: hidden;
+  }}
+  .abl-bar {{ height: 100%; border-radius: 4px; }}
+  .abl-bar-pass {{ background: #7a9a6d; }}
+  .abl-bar-warn {{ background: #c89b3c; }}
+  .abl-bar-info {{ background: #6b7a8f; }}
+  .abl-bar-fail {{ background: #c0524a; }}
+  .abl-delta {{ text-align: right; font-family: var(--mono); font-size: 12px; }}
+  .abl-tag {{ font-size: 11px; }}
+  .mc-grid {{
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }}
+  .mc-card {{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    padding: 12px 14px;
+    border-radius: 4px;
+  }}
+  .mc-card-pass {{ border-left-color: #7a9a6d; }}
+  .mc-card-warn {{ border-left-color: #c89b3c; }}
+  .mc-card-fail {{ border-left-color: #c0524a; }}
+  .mc-name {{
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 500;
+  }}
+  .mc-count {{ font-family: var(--mono); font-size: 22px; margin: 6px 0; color: var(--text); }}
+  .mc-desc {{ font-size: 11px; line-height: 1.4; }}
   .metric-card {{
     background: var(--surface);
     border: 1px solid var(--border);
