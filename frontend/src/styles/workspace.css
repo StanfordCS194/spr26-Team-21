@@ -1632,3 +1632,269 @@
 .schema-progress.phase-done .schema-progress-bar-fill {
   background: rgba(120, 200, 120, 0.7);
 }
+
+/* ── Diagnostics Panel ─────────────────────────────────────────────── */
+
+.dp-card {
+  margin-top: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.dp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dp-header-button {
+  width: 100%;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.dp-header-button:hover { background: rgba(255, 255, 255, 0.02); }
+
+.dp-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+
+.dp-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+
+.dp-chevron {
+  font-size: 12px;
+  color: var(--text-dim);
+  transition: transform 0.2s ease;
+}
+
+.dp-chevron-open { transform: rotate(180deg); }
+
+.dp-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  font-weight: 500;
+}
+
+.dp-badge-info {
+  background: rgba(107, 122, 143, 0.16);
+  color: #9aa6b8;
+}
+
+.dp-empty {
+  padding: 18px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.dp-body {
+  padding: 14px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.dp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dp-section-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.dp-section-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.dp-mono { font-family: var(--mono); }
+.dp-muted { color: var(--text-muted); font-size: 12px; }
+
+/* Confusion matrices */
+.dp-conf-matrices {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.dp-conf-matrix {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+}
+
+.dp-conf-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.dp-conf-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.dp-conf-grid th {
+  color: var(--text-dim);
+  font-weight: 500;
+  padding: 3px;
+  font-family: var(--mono);
+  border: none;
+  background: none;
+}
+
+.dp-conf-head {
+  font-size: 9px !important;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dp-conf-cell {
+  padding: 8px 4px;
+  border: 1px solid var(--border);
+  font-family: var(--mono);
+  position: relative;
+}
+
+.dp-conf-correct { background: rgba(122, 154, 109, 0.12); }
+.dp-conf-fp { background: rgba(200, 155, 60, 0.14); }
+.dp-conf-fn { background: rgba(192, 82, 74, 0.14); }
+
+.dp-conf-n { font-size: 14px; color: var(--text); }
+.dp-conf-pct { font-size: 9px; color: var(--text-muted); margin-top: 1px; }
+
+.dp-conf-tag {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 8px;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+}
+
+/* Feature ablation bars */
+.dp-abl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dp-abl-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 60px 110px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.dp-abl-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.dp-abl-bar-track {
+  height: 7px;
+  background: var(--bg);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.dp-abl-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s ease;
+}
+
+.dp-bar-pass { background: #7a9a6d; }
+.dp-bar-warn { background: #c89b3c; }
+.dp-bar-info { background: #6b7a8f; }
+.dp-bar-fail { background: #c0524a; }
+
+.dp-abl-delta { text-align: right; font-size: 12px; }
+.dp-abl-tag { font-size: 11px; }
+
+/* Misclassification overlap cards */
+.dp-mc-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.dp-mc-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  padding: 12px;
+  border-radius: 6px;
+}
+
+.dp-mc-card-pass { border-left-color: #7a9a6d; }
+.dp-mc-card-warn { border-left-color: #c89b3c; }
+.dp-mc-card-fail { border-left-color: #c0524a; }
+
+.dp-mc-name {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.dp-mc-count {
+  font-family: var(--mono);
+  font-size: 20px;
+  margin: 6px 0 4px;
+  color: var(--text);
+}
+
+.dp-mc-desc {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* Lists */
+.dp-list, .dp-list-num {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.dp-list li, .dp-list-num li {
+  margin-bottom: 6px;
+  line-height: 1.5;
+}
