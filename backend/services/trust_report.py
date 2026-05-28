@@ -315,6 +315,207 @@ def _list_block(items: list[str], css_class: str) -> str:
     return f'<ul class="{css_class}-list">{rows}</ul>'
 
 
+def _fmt_metric(v):
+    """Format a possibly-None numeric metric for display."""
+    if v is None:
+        return "—"
+    if isinstance(v, float):
+        return f"{v:.3f}"
+    return str(v)
+
+
+def _render_utility_section(utility: dict | None) -> str:
+    """TRTR / TSTR / TR+STR — does this synthetic data actually help downstream models?"""
+    if utility is None or not utility.get("available"):
+        return (
+            '<p class="muted">Downstream utility could not be evaluated. Requires uploaded '
+            'real source data with a label column (e.g. <span class="mono">fraud_reported</span>, '
+            '<span class="mono">label</span>, <span class="mono">target</span>).</p>'
+        )
+
+    lift = utility.get("recall_lift_pct")
+    if lift is None:
+        lift_status = "warn"
+        lift_text = "—"
+    elif lift >= 5:
+        lift_status = "pass"
+        lift_text = f"+{lift:.1f}pt"
+    elif lift >= 0:
+        lift_status = "warn"
+        lift_text = f"+{lift:.1f}pt"
+    else:
+        lift_status = "fail"
+        lift_text = f"{lift:.1f}pt"
+
+    def _row(label: str, sub: str, bucket: dict) -> str:
+        return (
+            f'<tr>'
+            f'<td><strong>{escape(label)}</strong><div class="muted">{escape(sub)}</div></td>'
+            f'<td class="num">{_fmt_metric(bucket.get("auc"))}</td>'
+            f'<td class="num">{_fmt_metric(bucket.get("f1"))}</td>'
+            f'<td class="num">{_fmt_metric(bucket.get("recall"))}</td>'
+            f'</tr>'
+        )
+
+    table = (
+        '<table class="data-table"><thead><tr>'
+        '<th>Training set</th><th>AUC</th><th>F1</th><th>Recall</th>'
+        '</tr></thead><tbody>'
+        + _row("Real only", "TRTR — baseline", utility.get("trtr") or {})
+        + _row("Synthetic only", "TSTR — synthetic-trained, real-tested", utility.get("tstr") or {})
+        + _row("Real + Synthetic", "TR+STR — augmented training", utility.get("augmented") or {})
+        + '</tbody></table>'
+    )
+
+    n_real = utility.get("n_real_train", "?")
+    n_synth = utility.get("n_synth", "?")
+    n_test = utility.get("n_test", "?")
+    target = utility.get("target", "?")
+    verdict = utility.get("verdict", "")
+
+    return (
+        f'<div class="utility-headline">'
+        f'<div class="utility-lift">'
+        f'<span class="muted">Augmentation lift (recall)</span> '
+        f'<span class="pill pill-{lift_status}">{lift_text}</span>'
+        f'</div>'
+        f'<div class="muted" style="margin-top:6px;">{escape(verdict)}</div>'
+        f'</div>'
+        f'{table}'
+        f'<div class="muted" style="margin-top:10px; font-size:11px;">'
+        f'Target: <span class="mono">{escape(str(target))}</span> · '
+        f'Trained on {n_real:,} real / {n_synth:,} synthetic rows · '
+        f'Tested on {n_test:,} held-out real rows · '
+        f'Classifier: XGBoost'
+        f'</div>'
+    )
+
+
+def _render_rule_pack_section(rule_pack: dict | None) -> str:
+    """Domain rule pack: violations before/after repair, per-rule breakdown."""
+    if rule_pack is None:
+        return (
+            '<p class="muted">No domain rule pack matched this schema. Aperture currently ships '
+            'packs for <span class="mono">insurance</span> and <span class="mono">clinical</span> '
+            'schemas — generated datasets in those domains receive automatic semantic checks.</p>'
+        )
+
+    pack_name = rule_pack.get("pack", "unknown")
+    before = rule_pack.get("violations_before", 0)
+    after = rule_pack.get("violations_after", 0)
+    n_rules = (rule_pack.get("after") or {}).get("n_rules", 0)
+    repaired_pct = round((1 - after / before) * 100, 1) if before > 0 else None
+
+    if after == 0 and before > 0:
+        headline_status = "pass"
+        headline = f"All {before:,} violation{'s' if before != 1 else ''} repaired"
+    elif after == 0:
+        headline_status = "pass"
+        headline = "No violations detected"
+    elif after < before:
+        headline_status = "warn"
+        headline = f"{after:,} violation{'s' if after != 1 else ''} remain after repair ({repaired_pct}% fixed)"
+    else:
+        headline_status = "fail"
+        headline = f"{after:,} violation{'s' if after != 1 else ''} could not be repaired"
+
+    after_rules = (rule_pack.get("after") or {}).get("rules", []) or []
+    interesting = [r for r in after_rules if r.get("violations", 0) > 0 or r.get("status") != "pass"]
+    if not interesting:
+        interesting = after_rules[:5]
+
+    rows_html = []
+    for r in interesting[:8]:
+        status = r.get("status", "pass")
+        rows_html.append(
+            f'<tr>'
+            f'<td class="mono">{escape(str(r.get("id", "")))}</td>'
+            f'<td>{escape(str(r.get("description", "")))}</td>'
+            f'<td class="num">{r.get("violations", 0):,}</td>'
+            f'<td><span class="pill pill-{status}">{status.upper()}</span></td>'
+            f'</tr>'
+        )
+
+    table = (
+        '<table class="data-table" style="margin-top:12px;"><thead><tr>'
+        '<th>Rule</th><th>Description</th><th>Remaining</th><th>Status</th>'
+        '</tr></thead><tbody>'
+        + "".join(rows_html)
+        + '</tbody></table>'
+    )
+
+    return (
+        f'<div class="rule-pack-headline">'
+        f'<span class="pill pill-{headline_status}">{escape(headline)}</span>'
+        f'<div class="muted" style="margin-top:6px;">Pack: '
+        f'<span class="mono">{escape(pack_name)}</span> · {n_rules} rules checked · '
+        f'{before:,} violations before repair → {after:,} after'
+        f'</div>'
+        f'</div>'
+        f'{table}'
+    )
+
+
+def _render_audit_section(audit: dict | None) -> str:
+    """Semantic plausibility audit (heuristic or LLM-scored)."""
+    if audit is None or not audit.get("available"):
+        reason = (audit or {}).get("reason", "unavailable")
+        return f'<p class="muted">Semantic audit unavailable ({escape(reason)}).</p>'
+
+    mean = audit.get("mean_plausibility", 0.0)
+    n_sampled = audit.get("n_sampled", 0)
+    n_flagged = audit.get("n_flagged", 0)
+    mode = audit.get("mode", "heuristic")
+    note = audit.get("note")
+
+    if mean >= 0.85 and n_flagged == 0:
+        status = "pass"
+    elif mean >= 0.7:
+        status = "warn"
+    else:
+        status = "fail"
+
+    top = audit.get("top_implausible", []) or []
+    if top:
+        rows = []
+        for r in top[:5]:
+            score = r.get("plausibility", 0.0)
+            reason_txt = r.get("reason") or "(no specific issue flagged)"
+            rows.append(
+                f'<tr>'
+                f'<td class="num">#{r.get("row_index", "?")}</td>'
+                f'<td class="num">{score:.3f}</td>'
+                f'<td class="muted">{escape(str(reason_txt))}</td>'
+                f'</tr>'
+            )
+        table = (
+            '<table class="data-table" style="margin-top:12px;"><thead><tr>'
+            '<th>Row</th><th>Plausibility</th><th>Flagged because</th>'
+            '</tr></thead><tbody>'
+            + "".join(rows)
+            + '</tbody></table>'
+        )
+    else:
+        table = '<p class="muted" style="margin-top:8px;">All sampled rows scored above the flag threshold.</p>'
+
+    mode_label = "Claude" if mode == "claude" else "deterministic heuristic"
+    disclosure = (
+        f'<div class="muted" style="margin-top:10px; font-size:11px;">'
+        f'Sampled {n_sampled} of {n_sampled} rows · scored by {escape(mode_label)}'
+        + (f' · <em>{escape(note)}</em>' if note else '')
+        + '</div>'
+    )
+
+    return (
+        f'<div>'
+        f'<span class="pill pill-{status}">Mean plausibility {mean:.2f}</span> '
+        f'<span class="muted">· {n_flagged} flagged of {n_sampled} sampled</span>'
+        f'</div>'
+        f'{table}'
+        f'{disclosure}'
+    )
+
+
 def render_html_report(session: dict) -> str:
     """Render a self-contained, printable HTML report for one generated dataset."""
     validation = session.get("validation", {}) or {}
@@ -333,6 +534,13 @@ def render_html_report(session: dict) -> str:
     metrics = validation.get("metrics", []) or []
     columns = validation.get("columns", []) or []
     edge_cases = validation.get("edgeCases", []) or []
+    utility = session.get("utility")
+    rule_pack = session.get("rule_pack")
+    audit = session.get("audit")
+
+    utility_section = _render_utility_section(utility)
+    rule_pack_section = _render_rule_pack_section(rule_pack)
+    audit_section = _render_audit_section(audit)
 
     # Metrics cards
     metric_cards = "".join(
@@ -556,6 +764,14 @@ def render_html_report(session: dict) -> str:
     grid-template-columns: repeat(3, 1fr);
     gap: 12px;
   }}
+  .utility-headline, .rule-pack-headline {{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 14px 18px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+  }}
+  .utility-lift {{ display: flex; align-items: center; gap: 8px; font-size: 13px; }}
   .metric-card {{
     background: var(--surface);
     border: 1px solid var(--border);
@@ -689,6 +905,21 @@ def render_html_report(session: dict) -> str:
   <section>
     <h2>Validation Metrics</h2>
     <div class="metrics-grid">{metric_cards}</div>
+  </section>
+
+  <section>
+    <h2>Downstream Utility</h2>
+    {utility_section}
+  </section>
+
+  <section>
+    <h2>Domain Rule Pack</h2>
+    {rule_pack_section}
+  </section>
+
+  <section>
+    <h2>Semantic Audit</h2>
+    {audit_section}
   </section>
 
   <section>
