@@ -170,6 +170,7 @@ export type WorkspaceMessage =
       generationSpec?: GenerationSpec;
       schemaSource?: 'llm' | 'upload' | 'agent';
       modelId?: string | null;
+      sourceId?: string | null;
       host?: string;
     };
 

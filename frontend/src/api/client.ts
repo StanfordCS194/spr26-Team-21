@@ -13,6 +13,7 @@ export interface InferSchemaResponse {
   stats: SourceStats;
   source_rows: number;
   model_id?: string | null;
+  source_id?: string;
   error?: string;
 }
 
@@ -144,6 +145,7 @@ export async function generate(
   format: 'csv' | 'jsonl' | 'parquet' = 'csv',
   edgeCases: string[] = [],
   modelId?: string | null,
+  sourceId?: string | null,
 ): Promise<GenerateResponse> {
   const res = await fetch(`${BASE}/generate`, {
     method: 'POST',
@@ -156,6 +158,7 @@ export async function generate(
       format,
       edge_cases: edgeCases,
       model_id: modelId ?? null,
+      source_id: sourceId ?? null,
     }),
   });
   if (!res.ok) throw new Error(`Generation failed: ${res.statusText}`);

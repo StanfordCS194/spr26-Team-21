@@ -68,6 +68,7 @@ function App() {
   const [landingStats, setLandingStats] = useState<SourceStats | null>(null);
   const [landingSourceRows, setLandingSourceRows] = useState<number>(0);
   const [landingModelId, setLandingModelId] = useState<string | null>(null);
+  const [landingSourceId, setLandingSourceId] = useState<string | null>(null);
   const [schemaInferring, setSchemaInferring] = useState(false);
 
   const activeProfile = profiles.find((p) => p.id === selectedId) ?? profiles[0];
@@ -79,6 +80,7 @@ function App() {
       setLandingStats(null);
       setLandingSourceRows(0);
       setLandingModelId(null);
+      setLandingSourceId(null);
       return;
     }
     setSchemaInferring(true);
@@ -89,11 +91,19 @@ function App() {
         setLandingStats(result.stats);
         setLandingSourceRows(result.source_rows);
         setLandingModelId(result.model_id ?? null);
+        setLandingSourceId(result.source_id ?? null);
+      } else {
+        setLandingSchema(null);
+        setLandingStats(null);
+        setLandingSourceRows(0);
+        setLandingModelId(null);
+        setLandingSourceId(null);
       }
     } catch {
       setLandingSchema(null);
       setLandingStats(null);
       setLandingModelId(null);
+      setLandingSourceId(null);
     } finally {
       setSchemaInferring(false);
     }
@@ -130,6 +140,7 @@ function App() {
     let generationSpec: GenerationSpec | undefined;
     let schemaSource: 'llm' | 'upload' | undefined;
     let modelId: string | null = null;
+    let sourceId: string | null = null;
     let planData = buildExecutionPlan(sourceNames);
 
     const mongoIntegration = activeProfile.integrations.find(
@@ -269,13 +280,20 @@ function App() {
       // Use already-inferred schema if available, otherwise infer now
       const result =
         landingSchema && landingStats
-          ? { columns: landingSchema, stats: landingStats, source_rows: landingSourceRows, model_id: landingModelId }
+          ? {
+              columns: landingSchema,
+              stats: landingStats,
+              source_rows: landingSourceRows,
+              model_id: landingModelId,
+              source_id: landingSourceId ?? undefined,
+            }
           : await inferSchema(groundingFiles).catch(() => null);
 
       if (result) {
         schema = result.columns;
         stats = result.stats;
         modelId = result.model_id ?? null;
+        sourceId = result.source_id ?? null;
         schemaSource = 'upload';
         generationSpec = {
           row_count: 10_000,
@@ -297,6 +315,7 @@ function App() {
         schema = result.columns;
         stats = result.stats;
         modelId = result.model_id ?? null;
+        sourceId = result.source_id ?? null;
         schemaSource = 'upload';
         generationSpec = {
           row_count: 10_000,
@@ -339,6 +358,7 @@ function App() {
       generationSpec,
       schemaSource,
       modelId,
+      sourceId,
     });
   };
 
@@ -373,6 +393,7 @@ function App() {
     setLandingStats(null);
     setLandingSourceRows(0);
     setLandingModelId(null);
+    setLandingSourceId(null);
     setView('landing');
   };
 
