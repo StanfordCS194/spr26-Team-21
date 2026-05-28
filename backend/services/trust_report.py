@@ -516,6 +516,89 @@ def _render_audit_section(audit: dict | None) -> str:
     )
 
 
+def _render_diagnostics_section(diagnostics: dict | None) -> str:
+    """Experiment diagnostics: confusion matrices + observations + recommendations."""
+    if diagnostics is None or not diagnostics.get("available"):
+        return (
+            '<p class="muted">Experiment diagnostics unavailable. Requires a real source dataset '
+            'with a label column so Aperture can compute confusion matrices on a held-out test set.</p>'
+        )
+
+    target = diagnostics.get("target", "?")
+    n_test = diagnostics.get("n_test", 0)
+    conf = diagnostics.get("confusion_matrices", {}) or {}
+    observations = diagnostics.get("observations", []) or []
+    recommendations = diagnostics.get("recommendations", []) or []
+
+    # Three confusion matrices side by side: TRTR / TSTR / TR+STR.
+    matrix_specs = [
+        ("trtr",      "Real only",        "TRTR"),
+        ("tstr",      "Synthetic only",   "TSTR"),
+        ("augmented", "Real + Synthetic", "TR+STR"),
+    ]
+    matrix_html = []
+    for key, name, abbrev in matrix_specs:
+        c = conf.get(key) or {}
+        tn, fp, fn, tp = c.get("tn", 0), c.get("fp", 0), c.get("fn", 0), c.get("tp", 0)
+        total = tn + fp + fn + tp
+        def _pct(n: int, total: int = total) -> str:
+            return f"{round(n / total * 100, 1)}%" if total > 0 else "—"
+        matrix_html.append(
+            f'<div class="conf-matrix">'
+            f'<div class="conf-label">{escape(name)} <span class="muted">({abbrev})</span></div>'
+            f'<table class="conf-grid">'
+            f'<tr><th></th><th class="conf-head">Pred 0</th><th class="conf-head">Pred 1</th></tr>'
+            f'<tr><th class="conf-head">True 0</th>'
+            f'<td class="conf-cell conf-correct">'
+            f'<div class="conf-n">{tn:,}</div><div class="conf-pct">{_pct(tn)}</div>'
+            f'<div class="conf-tag">TN</div></td>'
+            f'<td class="conf-cell conf-fp">'
+            f'<div class="conf-n">{fp:,}</div><div class="conf-pct">{_pct(fp)}</div>'
+            f'<div class="conf-tag">FP</div></td>'
+            f'</tr>'
+            f'<tr><th class="conf-head">True 1</th>'
+            f'<td class="conf-cell conf-fn">'
+            f'<div class="conf-n">{fn:,}</div><div class="conf-pct">{_pct(fn)}</div>'
+            f'<div class="conf-tag">FN</div></td>'
+            f'<td class="conf-cell conf-correct">'
+            f'<div class="conf-n">{tp:,}</div><div class="conf-pct">{_pct(tp)}</div>'
+            f'<div class="conf-tag">TP</div></td>'
+            f'</tr>'
+            f'</table>'
+            f'</div>'
+        )
+    matrices_block = f'<div class="conf-matrices">{"".join(matrix_html)}</div>'
+
+    obs_html = (
+        '<ul class="diag-list">'
+        + "".join(f'<li>{escape(o)}</li>' for o in observations)
+        + '</ul>'
+    ) if observations else '<p class="muted">No notable observations.</p>'
+
+    rec_html = (
+        '<ol class="diag-list-num">'
+        + "".join(f'<li>{escape(r)}</li>' for r in recommendations)
+        + '</ol>'
+    ) if recommendations else '<p class="muted">No specific recommendations.</p>'
+
+    return (
+        f'<div class="muted" style="margin-bottom: 12px; font-size: 11px;">'
+        f'Target: <span class="mono">{escape(str(target))}</span> · '
+        f'Held-out test set: {n_test:,} real rows · '
+        f'Each matrix shows model performance on the same {n_test:,} real test rows.'
+        f'</div>'
+        f'{matrices_block}'
+        f'<div class="diag-subsection">'
+        f'<h3>Observations</h3>'
+        f'{obs_html}'
+        f'</div>'
+        f'<div class="diag-subsection">'
+        f'<h3>Recommendations</h3>'
+        f'{rec_html}'
+        f'</div>'
+    )
+
+
 def render_html_report(session: dict) -> str:
     """Render a self-contained, printable HTML report for one generated dataset."""
     validation = session.get("validation", {}) or {}
@@ -537,10 +620,12 @@ def render_html_report(session: dict) -> str:
     utility = session.get("utility")
     rule_pack = session.get("rule_pack")
     audit = session.get("audit")
+    diagnostics = session.get("diagnostics")
 
     utility_section = _render_utility_section(utility)
     rule_pack_section = _render_rule_pack_section(rule_pack)
     audit_section = _render_audit_section(audit)
+    diagnostics_section = _render_diagnostics_section(diagnostics)
 
     # Metrics cards
     metric_cards = "".join(
@@ -772,6 +857,74 @@ def render_html_report(session: dict) -> str:
     margin-bottom: 8px;
   }}
   .utility-lift {{ display: flex; align-items: center; gap: 8px; font-size: 13px; }}
+  .conf-matrices {{
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-bottom: 18px;
+  }}
+  .conf-matrix {{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 12px;
+    border-radius: 4px;
+    text-align: center;
+  }}
+  .conf-label {{
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    font-weight: 500;
+  }}
+  .conf-grid {{
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }}
+  .conf-grid th {{
+    color: var(--text-dim);
+    font-weight: 500;
+    padding: 4px;
+    font-family: var(--mono);
+    border: none;
+  }}
+  .conf-head {{
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }}
+  .conf-cell {{
+    padding: 10px 6px;
+    border: 1px solid var(--border);
+    font-family: var(--mono);
+    position: relative;
+  }}
+  .conf-correct {{ background: rgba(122, 154, 109, 0.12); }}
+  .conf-fp {{ background: rgba(200, 155, 60, 0.14); }}
+  .conf-fn {{ background: rgba(192, 82, 74, 0.14); }}
+  .conf-n {{ font-size: 16px; color: var(--text); }}
+  .conf-pct {{ font-size: 10px; color: var(--text-muted); margin-top: 2px; }}
+  .conf-tag {{
+    position: absolute;
+    top: 3px;
+    right: 5px;
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+  }}
+  .diag-subsection {{ margin-top: 18px; }}
+  .diag-subsection h3 {{
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin: 0 0 8px;
+  }}
+  .diag-list, .diag-list-num {{ margin: 0; padding-left: 20px; }}
+  .diag-list li, .diag-list-num li {{ margin-bottom: 6px; font-size: 13px; }}
   .metric-card {{
     background: var(--surface);
     border: 1px solid var(--border);
@@ -910,6 +1063,11 @@ def render_html_report(session: dict) -> str:
   <section>
     <h2>Downstream Utility</h2>
     {utility_section}
+  </section>
+
+  <section>
+    <h2>Experiment Diagnostics</h2>
+    {diagnostics_section}
   </section>
 
   <section>
