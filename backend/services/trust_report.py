@@ -516,6 +516,166 @@ def _render_audit_section(audit: dict | None) -> str:
     )
 
 
+def _render_diagnostics_section(diagnostics: dict | None) -> str:
+    """Experiment diagnostics: confusion matrices + observations + recommendations."""
+    if diagnostics is None or not diagnostics.get("available"):
+        return (
+            '<p class="muted">Experiment diagnostics unavailable. Requires a real source dataset '
+            'with a label column so Aperture can compute confusion matrices on a held-out test set.</p>'
+        )
+
+    target = diagnostics.get("target", "?")
+    n_test = diagnostics.get("n_test", 0)
+    conf = diagnostics.get("confusion_matrices", {}) or {}
+    observations = diagnostics.get("observations", []) or []
+    recommendations = diagnostics.get("recommendations", []) or []
+    ablation = diagnostics.get("feature_ablation", []) or []
+    misclass = diagnostics.get("misclassification_overlap") or {}
+
+    # Three confusion matrices side by side: TRTR / TSTR / TR+STR.
+    matrix_specs = [
+        ("trtr",      "Real only",        "TRTR"),
+        ("tstr",      "Synthetic only",   "TSTR"),
+        ("augmented", "Real + Synthetic", "TR+STR"),
+    ]
+    matrix_html = []
+    for key, name, abbrev in matrix_specs:
+        c = conf.get(key) or {}
+        tn, fp, fn, tp = c.get("tn", 0), c.get("fp", 0), c.get("fn", 0), c.get("tp", 0)
+        total = tn + fp + fn + tp
+        def _pct(n: int, total: int = total) -> str:
+            return f"{round(n / total * 100, 1)}%" if total > 0 else "—"
+        matrix_html.append(
+            f'<div class="conf-matrix">'
+            f'<div class="conf-label">{escape(name)} <span class="muted">({abbrev})</span></div>'
+            f'<table class="conf-grid">'
+            f'<tr><th></th><th class="conf-head">Pred 0</th><th class="conf-head">Pred 1</th></tr>'
+            f'<tr><th class="conf-head">True 0</th>'
+            f'<td class="conf-cell conf-correct">'
+            f'<div class="conf-n">{tn:,}</div><div class="conf-pct">{_pct(tn)}</div>'
+            f'<div class="conf-tag">TN</div></td>'
+            f'<td class="conf-cell conf-fp">'
+            f'<div class="conf-n">{fp:,}</div><div class="conf-pct">{_pct(fp)}</div>'
+            f'<div class="conf-tag">FP</div></td>'
+            f'</tr>'
+            f'<tr><th class="conf-head">True 1</th>'
+            f'<td class="conf-cell conf-fn">'
+            f'<div class="conf-n">{fn:,}</div><div class="conf-pct">{_pct(fn)}</div>'
+            f'<div class="conf-tag">FN</div></td>'
+            f'<td class="conf-cell conf-correct">'
+            f'<div class="conf-n">{tp:,}</div><div class="conf-pct">{_pct(tp)}</div>'
+            f'<div class="conf-tag">TP</div></td>'
+            f'</tr>'
+            f'</table>'
+            f'</div>'
+        )
+    matrices_block = f'<div class="conf-matrices">{"".join(matrix_html)}</div>'
+
+    # Feature ablation — horizontal bar chart of recall delta per feature.
+    if ablation:
+        # Scale bars relative to the largest absolute delta in this run.
+        max_abs = max((abs(a["recall_delta_pct"]) for a in ablation), default=1.0) or 1.0
+        ab_rows = []
+        for a in ablation:
+            delta = a["recall_delta_pct"]
+            width = min(100, abs(delta) / max_abs * 100)
+            if delta >= 5:
+                tone = "pass"     # high reliance — useful feature
+            elif delta >= 1:
+                tone = "warn"
+            elif delta >= -1:
+                tone = "info"     # marginal
+            else:
+                tone = "fail"     # harmful
+            sign = "+" if delta >= 0 else ""
+            ab_rows.append(
+                f'<div class="abl-row">'
+                f'<div class="abl-name mono">{escape(a["feature"])}</div>'
+                f'<div class="abl-bar-track">'
+                f'<div class="abl-bar abl-bar-{tone}" style="width:{width}%"></div>'
+                f'</div>'
+                f'<div class="abl-delta num">{sign}{delta}pt</div>'
+                f'<div class="abl-tag muted">{escape(a["interpretation"])}</div>'
+                f'</div>'
+            )
+        ablation_block = (
+            '<div class="diag-subsection">'
+            '<h3>Feature Ablation (Augmented Model)</h3>'
+            '<div class="muted" style="margin-bottom:10px; font-size:11px;">'
+            'Recall drop when each top-importance feature is permuted in the test set. '
+            'Larger drops = model relies on that feature.'
+            '</div>'
+            '<div class="abl-list">' + "".join(ab_rows) + '</div>'
+            '</div>'
+        )
+    else:
+        ablation_block = ""
+
+    # Misclassification overlap — counts per bucket.
+    if misclass and misclass.get("counts"):
+        c = misclass["counts"]
+        buckets = [
+            ("Synthetic helps", c.get("trtr_only_wrong", 0), "pass",
+             "Test rows real-only got wrong but synthetic-only got right"),
+            ("Synthetic hurts", c.get("tstr_only_wrong", 0), "fail",
+             "Test rows real-only got right but synthetic-only got wrong"),
+            ("Both wrong", c.get("both_wrong", 0), "warn",
+             "Genuinely hard rows neither regime classifies correctly"),
+            ("Augmentation saves", c.get("augmentation_saves", 0), "pass",
+             "Augmented model correct where at least one base regime failed"),
+        ]
+        bucket_cards = "".join(
+            f'<div class="mc-card mc-card-{tone}">'
+            f'<div class="mc-name">{escape(name)}</div>'
+            f'<div class="mc-count">{count:,}</div>'
+            f'<div class="mc-desc muted">{escape(desc)}</div>'
+            f'</div>'
+            for name, count, tone, desc in buckets
+        )
+        misclass_block = (
+            '<div class="diag-subsection">'
+            '<h3>Row-Level Misclassification Overlap</h3>'
+            '<div class="muted" style="margin-bottom:10px; font-size:11px;">'
+            f'{escape(misclass.get("summary", ""))}'
+            '</div>'
+            f'<div class="mc-grid">{bucket_cards}</div>'
+            '</div>'
+        )
+    else:
+        misclass_block = ""
+
+    obs_html = (
+        '<ul class="diag-list">'
+        + "".join(f'<li>{escape(o)}</li>' for o in observations)
+        + '</ul>'
+    ) if observations else '<p class="muted">No notable observations.</p>'
+
+    rec_html = (
+        '<ol class="diag-list-num">'
+        + "".join(f'<li>{escape(r)}</li>' for r in recommendations)
+        + '</ol>'
+    ) if recommendations else '<p class="muted">No specific recommendations.</p>'
+
+    return (
+        f'<div class="muted" style="margin-bottom: 12px; font-size: 11px;">'
+        f'Target: <span class="mono">{escape(str(target))}</span> · '
+        f'Held-out test set: {n_test:,} real rows · '
+        f'Each matrix shows model performance on the same {n_test:,} real test rows.'
+        f'</div>'
+        f'{matrices_block}'
+        f'{ablation_block}'
+        f'{misclass_block}'
+        f'<div class="diag-subsection">'
+        f'<h3>Observations</h3>'
+        f'{obs_html}'
+        f'</div>'
+        f'<div class="diag-subsection">'
+        f'<h3>Recommendations</h3>'
+        f'{rec_html}'
+        f'</div>'
+    )
+
+
 def render_html_report(session: dict) -> str:
     """Render a self-contained, printable HTML report for one generated dataset."""
     validation = session.get("validation", {}) or {}
@@ -537,10 +697,12 @@ def render_html_report(session: dict) -> str:
     utility = session.get("utility")
     rule_pack = session.get("rule_pack")
     audit = session.get("audit")
+    diagnostics = session.get("diagnostics")
 
     utility_section = _render_utility_section(utility)
     rule_pack_section = _render_rule_pack_section(rule_pack)
     audit_section = _render_audit_section(audit)
+    diagnostics_section = _render_diagnostics_section(diagnostics)
 
     # Metrics cards
     metric_cards = "".join(
@@ -772,6 +934,120 @@ def render_html_report(session: dict) -> str:
     margin-bottom: 8px;
   }}
   .utility-lift {{ display: flex; align-items: center; gap: 8px; font-size: 13px; }}
+  .conf-matrices {{
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-bottom: 18px;
+  }}
+  .conf-matrix {{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 12px;
+    border-radius: 4px;
+    text-align: center;
+  }}
+  .conf-label {{
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    font-weight: 500;
+  }}
+  .conf-grid {{
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }}
+  .conf-grid th {{
+    color: var(--text-dim);
+    font-weight: 500;
+    padding: 4px;
+    font-family: var(--mono);
+    border: none;
+  }}
+  .conf-head {{
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }}
+  .conf-cell {{
+    padding: 10px 6px;
+    border: 1px solid var(--border);
+    font-family: var(--mono);
+    position: relative;
+  }}
+  .conf-correct {{ background: rgba(122, 154, 109, 0.12); }}
+  .conf-fp {{ background: rgba(200, 155, 60, 0.14); }}
+  .conf-fn {{ background: rgba(192, 82, 74, 0.14); }}
+  .conf-n {{ font-size: 16px; color: var(--text); }}
+  .conf-pct {{ font-size: 10px; color: var(--text-muted); margin-top: 2px; }}
+  .conf-tag {{
+    position: absolute;
+    top: 3px;
+    right: 5px;
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+  }}
+  .diag-subsection {{ margin-top: 18px; }}
+  .diag-subsection h3 {{
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin: 0 0 8px;
+  }}
+  .diag-list, .diag-list-num {{ margin: 0; padding-left: 20px; }}
+  .diag-list li, .diag-list-num li {{ margin-bottom: 6px; font-size: 13px; }}
+  .abl-list {{ display: flex; flex-direction: column; gap: 6px; }}
+  .abl-row {{
+    display: grid;
+    grid-template-columns: 160px 1fr 70px 130px;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+  }}
+  .abl-name {{ font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+  .abl-bar-track {{
+    height: 8px;
+    background: var(--bg);
+    border-radius: 4px;
+    overflow: hidden;
+  }}
+  .abl-bar {{ height: 100%; border-radius: 4px; }}
+  .abl-bar-pass {{ background: #7a9a6d; }}
+  .abl-bar-warn {{ background: #c89b3c; }}
+  .abl-bar-info {{ background: #6b7a8f; }}
+  .abl-bar-fail {{ background: #c0524a; }}
+  .abl-delta {{ text-align: right; font-family: var(--mono); font-size: 12px; }}
+  .abl-tag {{ font-size: 11px; }}
+  .mc-grid {{
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }}
+  .mc-card {{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    padding: 12px 14px;
+    border-radius: 4px;
+  }}
+  .mc-card-pass {{ border-left-color: #7a9a6d; }}
+  .mc-card-warn {{ border-left-color: #c89b3c; }}
+  .mc-card-fail {{ border-left-color: #c0524a; }}
+  .mc-name {{
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 500;
+  }}
+  .mc-count {{ font-family: var(--mono); font-size: 22px; margin: 6px 0; color: var(--text); }}
+  .mc-desc {{ font-size: 11px; line-height: 1.4; }}
   .metric-card {{
     background: var(--surface);
     border: 1px solid var(--border);
@@ -910,6 +1186,11 @@ def render_html_report(session: dict) -> str:
   <section>
     <h2>Downstream Utility</h2>
     {utility_section}
+  </section>
+
+  <section>
+    <h2>Experiment Diagnostics</h2>
+    {diagnostics_section}
   </section>
 
   <section>
