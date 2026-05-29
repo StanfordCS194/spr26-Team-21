@@ -13,6 +13,7 @@ from services.diagnostics import compute_diagnostics
 from services.edge_case_discovery import discover_edge_cases
 from services.edge_cases import apply_edge_cases, parse_edge_cases
 from services.llm_auditor import audit_sample
+from services.privacy import compute_privacy
 from services.rule_packs import apply_pack
 from services.synthesis import synthesize
 from services.trust_report import render_html_report
@@ -101,6 +102,11 @@ async def generate(req: GenerateRequest):
     # Semantic auditor (heuristic stub; LLM hook in services/llm_auditor.py).
     audit = audit_sample(synth_df, rule_pack_report=rule_report, use_llm=False)
 
+    # Privacy / disclosure risk: DCR + NNDR + baseline protection against the real
+    # source. Membership-inference runs only when a holdout is available (not in the
+    # default pipeline) — see services/privacy.py.
+    privacy = compute_privacy(real_df, synth_df)
+
     file_size_kb = round(len(data_bytes) / 1024, 1)
     filename = f"aperture_output.{fmt}"
 
@@ -119,6 +125,7 @@ async def generate(req: GenerateRequest):
         "diagnostics": diagnostics,
         "rule_pack": rule_report,
         "audit": audit,
+        "privacy": privacy,
         "row_count": n,
         "file_size_kb": file_size_kb,
         "filename": filename,
@@ -136,6 +143,7 @@ async def generate(req: GenerateRequest):
         "diagnostics": diagnostics,
         "rule_pack": rule_report,
         "audit": audit,
+        "privacy": privacy,
         "created_at": created_at,
     }
 
@@ -197,4 +205,5 @@ async def manifest(session_id: str):
         "diagnostics": entry.get("diagnostics"),
         "rule_pack": entry.get("rule_pack"),
         "audit": entry.get("audit"),
+        "privacy": entry.get("privacy"),
     }
