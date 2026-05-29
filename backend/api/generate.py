@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 
 from core.state import sdv_models, sessions, source_datasets
 from models.schemas import GenerateRequest
+from services.diagnostics import compute_diagnostics
 from services.edge_cases import apply_edge_cases, parse_edge_cases
 from services.llm_auditor import audit_sample
 from services.rule_packs import apply_pack
@@ -84,6 +85,9 @@ async def generate(req: GenerateRequest):
     real_df = sdv_models.get(req.model_id, {}).get("source_df") if req.model_id else None
     utility = compute_utility(real_df, synth_df, label_col=req.label_col)
 
+    # Experiment diagnostics: confusion matrices + observations + recommendations on top of utility.
+    diagnostics = compute_diagnostics(real_df, synth_df, utility=utility, label_col=req.label_col)
+
     # Semantic auditor (heuristic stub; LLM hook in services/llm_auditor.py).
     audit = audit_sample(synth_df, rule_pack_report=rule_report, use_llm=False)
 
@@ -101,6 +105,7 @@ async def generate(req: GenerateRequest):
         "edge_cases_requested": list(req.edge_cases),
         "validation": validation,
         "utility": utility,
+        "diagnostics": diagnostics,
         "rule_pack": rule_report,
         "audit": audit,
         "row_count": n,
@@ -117,6 +122,7 @@ async def generate(req: GenerateRequest):
         "filename": filename,
         "validation": validation,
         "utility": utility,
+        "diagnostics": diagnostics,
         "rule_pack": rule_report,
         "audit": audit,
         "created_at": created_at,
@@ -176,6 +182,7 @@ async def manifest(session_id: str):
         "edge_cases_requested": entry.get("edge_cases_requested", []),
         "validation": entry.get("validation", {}),
         "utility": entry.get("utility"),
+        "diagnostics": entry.get("diagnostics"),
         "rule_pack": entry.get("rule_pack"),
         "audit": entry.get("audit"),
     }

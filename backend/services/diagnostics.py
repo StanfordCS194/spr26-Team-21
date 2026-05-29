@@ -150,6 +150,9 @@ def _predict(clf: XGBClassifier | None, X: np.ndarray) -> np.ndarray | None:
 def _train_three_regimes(prep: dict) -> dict[str, Any] | None:
     """Train TRTR / TSTR / TR+STR. Returns classifiers + predictions + confusion matrices,
     so downstream analyses (ablation, misclass overlap) can reuse the trained models."""
+    
+def _confusion_matrices(prep: dict) -> dict[str, dict[str, int]] | None:
+    """Train TRTR / TSTR / TR+STR and return three confusion matrices on the same held-out test set."""
     trtr_clf = _train(prep["X_train"], prep["y_train"])
     tstr_clf = _train(prep["X_synth"], prep["y_synth"])
 
@@ -478,7 +481,6 @@ def _build_recommendations(
     )
 
     return recs
-
 
 def compute_diagnostics(
     real_df: pd.DataFrame | None,
