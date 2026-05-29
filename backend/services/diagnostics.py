@@ -147,6 +147,10 @@ def _predict(clf: XGBClassifier | None, X: np.ndarray) -> np.ndarray | None:
     return (proba > 0.5).astype(int)
 
 
+def _train_three_regimes(prep: dict) -> dict[str, Any] | None:
+    """Train TRTR / TSTR / TR+STR. Returns classifiers + predictions + confusion matrices,
+    so downstream analyses (ablation, misclass overlap) can reuse the trained models."""
+    
 def _confusion_matrices(prep: dict) -> dict[str, dict[str, int]] | None:
     """Train TRTR / TSTR / TR+STR and return three confusion matrices on the same held-out test set."""
     trtr_clf = _train(prep["X_train"], prep["y_train"])
@@ -156,13 +160,126 @@ def _confusion_matrices(prep: dict) -> dict[str, dict[str, int]] | None:
     y_aug = np.concatenate([prep["y_train"], prep["y_synth"]])
     aug_clf = _train(X_aug, y_aug)
 
-    out: dict[str, dict[str, int]] = {}
-    for name, clf in (("trtr", trtr_clf), ("tstr", tstr_clf), ("augmented", aug_clf)):
-        preds = _predict(clf, prep["X_test"])
-        if preds is None:
+    classifiers = {"trtr": trtr_clf, "tstr": tstr_clf, "augmented": aug_clf}
+    preds: dict[str, np.ndarray] = {}
+    conf: dict[str, dict[str, int]] = {}
+    for name, clf in classifiers.items():
+        p = _predict(clf, prep["X_test"])
+        if p is None:
             return None
-        out[name] = _confusion(prep["y_test"], preds)
+        preds[name] = p
+        conf[name] = _confusion(prep["y_test"], p)
+    return {"classifiers": classifiers, "predictions": preds, "confusion": conf}
+
+
+def _feature_importance(clf: XGBClassifier, feature_names: list[str], top_k: int = 8) -> list[tuple[int, str, float]]:
+    """Return the top-K features by gain importance, as (index, name, importance) tuples."""
+    importances = clf.feature_importances_
+    order = np.argsort(importances)[::-1][:top_k]
+    return [(int(i), feature_names[i], float(importances[i])) for i in order]
+
+
+def _recall(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    pos = (y_true == 1)
+    return float(y_pred[pos].mean()) if pos.any() else 0.0
+
+
+def _compute_ablation(
+    clf: XGBClassifier | None,
+    X_test: np.ndarray,
+    y_test: np.ndarray,
+    feature_names: list[str],
+    top_k: int = 8,
+) -> list[dict[str, Any]]:
+    """Permutation feature importance against the augmented model.
+
+    For each top-K feature (by gain), shuffle that column in X_test and measure how much
+    the augmented model's recall drops. Large positive drop => model relies on that feature.
+    Capped at top_k features to bound runtime to roughly N * inference cost.
+    """
+    if clf is None or len(y_test) == 0:
+        return []
+    rng = np.random.default_rng(DEFAULT_RANDOM_STATE)
+    baseline_pred = _predict(clf, X_test)
+    if baseline_pred is None:
+        return []
+    baseline_recall = _recall(y_test, baseline_pred)
+
+    top = _feature_importance(clf, feature_names, top_k=top_k)
+    out: list[dict[str, Any]] = []
+    for idx, name, importance in top:
+        X_permuted = X_test.copy()
+        X_permuted[:, idx] = rng.permutation(X_permuted[:, idx])
+        permuted_pred = _predict(clf, X_permuted)
+        if permuted_pred is None:
+            continue
+        permuted_recall = _recall(y_test, permuted_pred)
+        delta_pct = round((baseline_recall - permuted_recall) * 100, 1)
+        if delta_pct >= 5:
+            interpretation = "high reliance"
+        elif delta_pct >= 1:
+            interpretation = "useful"
+        elif delta_pct >= -1:
+            interpretation = "marginal"
+        else:
+            interpretation = "harmful when present"
+        out.append({
+            "feature": name,
+            "importance": round(importance, 4),
+            "recall_delta_pct": delta_pct,
+            "baseline_recall": round(baseline_recall, 4),
+            "permuted_recall": round(permuted_recall, 4),
+            "interpretation": interpretation,
+        })
     return out
+
+
+def _compute_misclass_overlap(
+    y_test: np.ndarray,
+    preds: dict[str, np.ndarray],
+) -> dict[str, Any]:
+    """Compare which test rows each regime gets wrong.
+
+    Returns counts plus row indices in four buckets:
+      - tstr_only_wrong:  TRTR got these right, TSTR didn't  → synthetic hurts here
+      - trtr_only_wrong:  TSTR got these right, TRTR didn't  → synthetic helps here
+      - both_wrong:       Neither regime got them            → genuinely hard rows
+      - augmentation_only_correct: AUG correct AND at least one of TRTR/TSTR wrong → augmentation saves
+    """
+    trtr_wrong = (preds["trtr"] != y_test)
+    tstr_wrong = (preds["tstr"] != y_test)
+    aug_wrong = (preds["augmented"] != y_test)
+
+    tstr_only = np.where(tstr_wrong & ~trtr_wrong)[0]
+    trtr_only = np.where(trtr_wrong & ~tstr_wrong)[0]
+    both = np.where(trtr_wrong & tstr_wrong)[0]
+    aug_saves = np.where(~aug_wrong & (trtr_wrong | tstr_wrong))[0]
+
+    # Keep up to 5 example row indices per bucket for the report.
+    cap = 5
+    n_help = int(len(trtr_only))
+    n_hurt = int(len(tstr_only))
+    if n_help >= n_hurt + 5:
+        summary = f"Synthetic helps on {n_help} rows where real-only failed; hurts on {n_hurt} rows where real-only succeeded — net positive contribution."
+    elif n_hurt >= n_help + 5:
+        summary = f"Synthetic hurts on {n_hurt} rows; only helps on {n_help} — net negative contribution at the current synthetic distribution."
+    else:
+        summary = f"Synthetic helps on {n_help} rows and hurts on {n_hurt} — roughly neutral row-level contribution."
+
+    return {
+        "tstr_only_wrong": [int(i) for i in tstr_only[:cap]],
+        "trtr_only_wrong": [int(i) for i in trtr_only[:cap]],
+        "both_wrong": [int(i) for i in both[:cap]],
+        "augmentation_saves": [int(i) for i in aug_saves[:cap]],
+        "counts": {
+            "tstr_only_wrong": int(len(tstr_only)),
+            "trtr_only_wrong": int(len(trtr_only)),
+            "both_wrong": int(len(both)),
+            "augmentation_saves": int(len(aug_saves)),
+            "total_test_rows": int(len(y_test)),
+        },
+        "summary": summary,
+    }
 
 
 def _gap_pct(a: float | None, b: float | None) -> float | None:
@@ -180,6 +297,44 @@ def _fn_rate(c: dict[str, int]) -> float:
 def _fp_rate(c: dict[str, int]) -> float:
     neg = c["tn"] + c["fp"]
     return c["fp"] / neg if neg > 0 else 0.0
+
+
+def _build_ablation_observations(ablation: list[dict]) -> list[str]:
+    """Observations driven by per-feature ablation findings."""
+    obs: list[str] = []
+    if not ablation:
+        return obs
+    top = max(ablation, key=lambda a: a["recall_delta_pct"])
+    harmful = [a for a in ablation if a["recall_delta_pct"] <= -3]
+
+    if top["recall_delta_pct"] >= 5:
+        obs.append(
+            f"Augmented model relies heavily on '{top['feature']}' — permuting it drops recall by "
+            f"{top['recall_delta_pct']}pt. Verify its synthetic distribution looks right before trusting the model."
+        )
+    if harmful:
+        names = ", ".join(f"'{a['feature']}'" for a in harmful[:2])
+        obs.append(
+            f"Permuting {names} actually improved recall — these features may be noisy or harmful "
+            f"in the current synthetic distribution."
+        )
+    return obs
+
+
+def _build_misclass_observations(misclass: dict) -> list[str]:
+    """Observations driven by row-level misclassification overlap."""
+    obs: list[str] = []
+    if not misclass:
+        return obs
+    c = misclass.get("counts", {})
+    saves = c.get("augmentation_saves", 0)
+    total = max(c.get("total_test_rows", 1), 1)
+    if saves > 0:
+        obs.append(
+            f"Augmentation correctly classifies {saves} of {total} test rows that at least one of "
+            f"real-only or synthetic-only got wrong — measurable row-level benefit from combining the two."
+        )
+    return obs
 
 
 def _build_observations(
@@ -327,7 +482,6 @@ def _build_recommendations(
 
     return recs
 
-
 def compute_diagnostics(
     real_df: pd.DataFrame | None,
     synth_df: pd.DataFrame,
@@ -351,11 +505,27 @@ def compute_diagnostics(
     if prep is None:
         return None
 
-    conf = _confusion_matrices(prep)
-    if conf is None:
+    trained = _train_three_regimes(prep)
+    if trained is None:
         return None
 
-    observations = _build_observations(utility, conf)
+    conf = trained["confusion"]
+    preds = trained["predictions"]
+    aug_clf = trained["classifiers"]["augmented"]
+
+    # Per-feature ablation on the augmented model (top-K by feature importance).
+    feature_ablation = _compute_ablation(
+        aug_clf, prep["X_test"], prep["y_test"], prep["feature_names"], top_k=8,
+    )
+
+    # Row-level overlap: where does each regime get test rows wrong?
+    misclass_overlap = _compute_misclass_overlap(prep["y_test"], preds)
+
+    observations = (
+        _build_observations(utility, conf)
+        + _build_ablation_observations(feature_ablation)
+        + _build_misclass_observations(misclass_overlap)
+    )
     recommendations = _build_recommendations(utility, conf, len(synth_df))
 
     return {
@@ -363,6 +533,8 @@ def compute_diagnostics(
         "target": label,
         "n_test": int(len(prep["y_test"])),
         "confusion_matrices": conf,
+        "feature_ablation": feature_ablation,
+        "misclassification_overlap": misclass_overlap,
         "observations": observations,
         "recommendations": recommendations,
     }
