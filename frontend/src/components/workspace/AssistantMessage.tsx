@@ -6,6 +6,7 @@ import GroundingStrategy from './GroundingStrategy';
 import SchemaCard from './SchemaCard';
 import SchemaInferenceProgress from './SchemaInferenceProgress';
 import ValidationReport from './ValidationReport';
+import DiagnosticsPanel from './DiagnosticsPanel';
 import ClarifyingQuestions from './ClarifyingQuestions';
 import PreviewTable from './PreviewTable';
 import { Download, FileIcon } from '../icons/Icons';
@@ -296,6 +297,7 @@ export default function AssistantMessage({
                         )}
                       </div>
                       <ValidationReport report={report} />
+                      <DiagnosticsPanel diagnostics={genResult?.diagnostics} />
                     </>
                   )}
                 </div>

@@ -65,6 +65,52 @@ export interface ValidationReportData {
   diversityIssues?: DiversityIssue[];
 }
 
+export interface ConfusionMatrix {
+  tn: number;
+  fp: number;
+  fn: number;
+  tp: number;
+}
+
+export interface FeatureAblationEntry {
+  feature: string;
+  importance: number;
+  recall_delta_pct: number;
+  baseline_recall: number;
+  permuted_recall: number;
+  interpretation: 'high reliance' | 'useful' | 'marginal' | 'harmful when present';
+}
+
+export interface MisclassificationOverlap {
+  tstr_only_wrong: number[];
+  trtr_only_wrong: number[];
+  both_wrong: number[];
+  augmentation_saves: number[];
+  counts: {
+    tstr_only_wrong: number;
+    trtr_only_wrong: number;
+    both_wrong: number;
+    augmentation_saves: number;
+    total_test_rows: number;
+  };
+  summary: string;
+}
+
+export interface DiagnosticsReport {
+  available: boolean;
+  target?: string;
+  n_test?: number;
+  confusion_matrices?: {
+    trtr: ConfusionMatrix;
+    tstr: ConfusionMatrix;
+    augmented: ConfusionMatrix;
+  };
+  feature_ablation?: FeatureAblationEntry[];
+  misclassification_overlap?: MisclassificationOverlap;
+  observations?: string[];
+  recommendations?: string[];
+}
+
 export interface GenerateResponse {
   session_id: string;
   row_count: number;
@@ -72,6 +118,7 @@ export interface GenerateResponse {
   format?: string;
   filename?: string;
   validation: ValidationReportData;
+  diagnostics?: DiagnosticsReport | null;
 }
 
 export interface ClarifyingQuestion {
