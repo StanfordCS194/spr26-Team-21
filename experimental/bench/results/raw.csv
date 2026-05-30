@@ -1,0 +1,2 @@
+dataset,synthesizer,n_synth,fit_seconds,sample_seconds,trtr_auc,tstr_auc,augmented_auc,trtr_recall,tstr_recall,augmented_recall,recall_lift_pct,utility_verdict,rule_pack,violations_before,violations_after,audit_mean_plausibility,audit_n_flagged,privacy_n_exact_matches,privacy_dcr_median,privacy_baseline_score,privacy_mia_auc,detection_xgb_auc,detection_lr_auc,detection_agreement
+pima_diabetes,GaussianCopula,200,0.3,0.0,0.8157,0.7099,0.7863,0.6512,0.5581,0.6279,-2.3,Synthetic-only training within 10.6pt AUC of real — usable for downstream ML,,,,0.92,0,,,,,,,
