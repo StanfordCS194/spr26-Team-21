@@ -41,7 +41,9 @@ async def generate(req: GenerateRequest):
     synth_df, edge_case_report = apply_edge_cases(synth_df, rules, req.source_stats)
 
     # Domain rule pack: detect (insurance/clinical), check, repair, recheck.
-    rule_report = apply_pack(synth_df)
+    # Source-stats is forwarded so aggregate rules (e.g. C15 fraud-rate-match-source)
+    # can compare the synthetic prevalence to the original upload's prevalence.
+    rule_report = apply_pack(synth_df, source_stats=req.source_stats)
     if rule_report is not None:
         synth_df = rule_report.pop("repaired_df")
 

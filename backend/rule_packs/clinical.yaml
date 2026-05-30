@@ -1,9 +1,14 @@
 pack: clinical
-version: 1
-description: Clinical / EHR domain rules. Catches biologically impossible synthetic patient records.
+version: 2
+description: Clinical / EHR domain rules. Catches biologically impossible synthetic patient records, medication-condition mismatches, and pediatric overdose risk.
 sources:
   - HIPAA quasi-identifier guidance
-  - Common clinical data dictionaries (LOINC, ICD-10)
+  - Common clinical data dictionaries (LOINC, ICD-10-CM/PCS)
+  - American Diabetes Association, Standards of Medical Care in Diabetes (2024)
+  - HEDIS quality measures (medication-condition pairings)
+  - AHA / CMS ICD-10-CM/PCS Official Coding Guidelines
+  - AAP Red Book / Young's rule (pediatric dose scaling)
+  - WHO Essential Medicines List
 
 rules:
   - id: CL1_hba1c_diabetes
@@ -33,3 +38,43 @@ rules:
     columns: [heart_rate, blood_pressure_systolic, temperature]
     check: "min(heart_rate, blood_pressure_systolic, temperature) >= 0"
     repair: clip_to_zero
+
+  - id: CL5_metformin_implies_diabetes
+    severity: hard
+    description: Metformin (first-line T2D therapy per ADA Standards of Care) implies a diabetes or pre-diabetes diagnosis
+    columns: [diagnosis]
+    check: "metformin not present OR diagnosis mentions 'diabet'"
+    repair: tag_diabetes_for_metformin
+
+  - id: CL6_medication_condition_consistency
+    severity: soft
+    description: Common medications should pair with their indicated condition (HEDIS / WHO Essential Medicines)
+    columns: [medication, diagnosis]
+    repair: none
+    pairs:
+      - {medication_contains: "metformin",      condition_contains: ["diabet", "pre-diabet"]}
+      - {medication_contains: "insulin",         condition_contains: ["diabet"]}
+      - {medication_contains: "warfarin",        condition_contains: ["atrial", "thromb", "embol"]}
+      - {medication_contains: "levothyroxine",   condition_contains: ["hypothyroid"]}
+      - {medication_contains: "albuterol",       condition_contains: ["asthma", "copd", "broncho"]}
+      - {medication_contains: "statin",          condition_contains: ["hyperlipid", "cholesterol", "atheroscl"]}
+
+  - id: CL7_icd10_procedure_pairing
+    severity: hard
+    description: Forbid impossible diagnosis × procedure code prefix combinations (AHA / CMS coding guidelines)
+    columns: [diag_code, procedure_code, sex]
+    repair: none
+    impossible_pairs:
+      # ICD-10 obstetric diagnosis chapter (O00-O9A) with patients coded male
+      # is documented as a top-tier coding error in CMS-OIG audits.
+      - {diag_prefix: "O", procedure_prefix: "10",  note: "obstetric Dx + obstetric procedure on non-pregnant patient is a coding red flag"}
+      # ICD-10-PCS section "0" (Medical/Surgical) with neonatal diagnosis chapter (P)
+      # applied to a non-neonatal age (the row check handles age cross-validation).
+      - {diag_prefix: "P",  procedure_prefix: "0W", note: "perinatal Dx + adult-anatomy procedure flagged for review"}
+
+  - id: CL8_pediatric_dosing
+    severity: hard
+    description: Pediatric (age < 18) dose must not exceed adult_max × age/(age+12) (Young's rule, classic pediatric pharmacology)
+    columns: [age, medication_dose_mg, medication_adult_max_mg]
+    check: "age >= 18 OR medication_dose_mg <= medication_adult_max_mg * age / (age + 12)"
+    repair: clip_pediatric_dose

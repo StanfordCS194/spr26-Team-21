@@ -1,10 +1,12 @@
 pack: insurance
-version: 1
-description: Auto/property insurance claim domain rules. Violations in real claims are documented fraud indicators (CAIF tier-1 red flags).
+version: 2
+description: Auto/property insurance claim domain rules. Violations in real claims are documented fraud indicators (CAIF tier-1 red flags) and basic contract / actuarial integrity checks (NAIC, NCCI).
 sources:
   - Coalition Against Insurance Fraud, "Build a Better Mousetrap" (2022)
   - NICB Red Flags
   - ISO ClaimSearch documented fraud signals
+  - NAIC Model Insurance Contract Acts (deductible / coverage relations)
+  - NCCI rating manuals (premium-to-risk monotonicity)
 
 rules:
   - id: C1_claim_sum
@@ -55,3 +57,35 @@ rules:
     columns: [age]
     check: "16 <= age <= 100"
     repair: clip_age
+
+  - id: C4_deductible_le_coverage
+    severity: hard
+    description: A deductible cannot exceed the total coverage amount on the same policy
+    columns: [policy_deductible, coverage_amount]
+    check: "policy_deductible <= coverage_amount"
+    repair: clip_deductible_to_coverage
+
+  - id: C14_policy_dates
+    severity: hard
+    description: policy_end_date must be strictly after policy_start_date
+    columns: [policy_start_date, policy_end_date]
+    check: "policy_end_date > policy_start_date"
+    repair: fix_policy_dates
+
+  - id: C5_premium_monotonic_risk
+    kind: aggregate
+    severity: soft
+    description: Annual premium should increase monotonically with risk_score across the synthetic frame (NCCI rating-manual principle)
+    columns: [policy_annual_premium, risk_score]
+    metric: spearman_correlation
+    threshold_min: 0.3
+    repair: none
+
+  - id: C15_fraud_rate_match_source
+    kind: aggregate
+    severity: hard
+    description: Synthetic fraud_reported prevalence must lie within ±0.5% of the source fraud rate (data-fidelity preservation)
+    columns: [fraud_reported]
+    metric: rate_match
+    tolerance: 0.005
+    repair: none
