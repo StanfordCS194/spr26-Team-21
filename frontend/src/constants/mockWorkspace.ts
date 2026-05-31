@@ -11,6 +11,62 @@ export interface ValidationColumnResult {
   fidelity: number;
   status: ValidationStatus;
   note?: string;
+  // P2: moment drift (numeric columns)
+  skewnessDrift?: number;
+  sourceSkewness?: number;
+  syntheticSkewness?: number;
+  kurtosisDrift?: number;
+  boundaryViolations?: number;
+  // P2: cardinality (categorical columns)
+  cardinalityScore?: number;
+  sourceCardinality?: number;
+  syntheticCardinality?: number;
+}
+
+export interface DistanceColumnResult {
+  column: string;
+  jsDivergence: number;
+  status: ValidationStatus;
+}
+
+export interface ChiSquaredResult {
+  column: string;
+  chiSquared: number;
+  pValue: number;
+  degreesOfFreedom: number;
+  status: ValidationStatus;
+}
+
+export interface DistributionDistance {
+  score: number;
+  status: ValidationStatus;
+  numericColumns: DistanceColumnResult[];
+  categoricalColumns: ChiSquaredResult[];
+}
+
+export interface CorrelationDriftPair {
+  columns: [string, string];
+  sourceCorr: number;
+  syntheticCorr: number;
+  drift: number;
+  status: ValidationStatus;
+}
+
+export interface CorrelationDrift {
+  score: number;
+  status: ValidationStatus;
+  colsChecked: number;
+  pairsChecked: number;
+  driftedPairs: CorrelationDriftPair[];
+}
+
+export interface KAnonymity {
+  quasiIdentifiers: string[];
+  minK: number;
+  kThreshold: number;
+  groupsBelowThreshold: number;
+  totalGroups: number;
+  status: ValidationStatus;
 }
 
 export interface EdgeCaseCoverage {
@@ -54,6 +110,10 @@ export interface ValidationReport {
   metrics: ValidationMetric[];
   columns: ValidationColumnResult[];
   insights: string[];
+  // P1 additions
+  distributionDistance?: DistributionDistance;
+  correlationDrift?: CorrelationDrift;
+  kAnonymity?: KAnonymity;
 }
 
 export const VALIDATION_REPORT: ValidationReport = {

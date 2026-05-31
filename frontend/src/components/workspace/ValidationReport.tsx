@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Check, ChevronDown } from '../icons/Icons';
-import type { ValidationReport as ValidationReportType, ValidationStatus } from '../../constants/mockWorkspace';
+import type {
+  ValidationReport as ValidationReportType,
+  ValidationStatus,
+  DistributionDistance,
+  CorrelationDrift,
+  KAnonymity,
+} from '../../constants/mockWorkspace';
 
 interface Props {
   report: ValidationReportType;
@@ -14,6 +20,131 @@ function WarnIcon() {
       <line x1="12" y1="9" x2="12" y2="13" />
       <line x1="12" y1="17" x2="12.01" y2="17" />
     </svg>
+  );
+}
+
+function StatusBadge({ status }: { status: ValidationStatus }) {
+  return (
+    <span className={`ws-validation-badge ws-validation-badge-${status}`}>
+      {status === 'pass' ? 'Pass' : status === 'warn' ? 'Warn' : 'Fail'}
+    </span>
+  );
+}
+
+function DistributionDistanceSection({ data, animated }: { data: DistributionDistance; animated: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const allCols = [...data.numericColumns, ...data.categoricalColumns];
+  const flagged = allCols.filter((c) => c.status !== 'pass');
+
+  return (
+    <div className="ws-validation-subsection">
+      <button
+        className="ws-validation-section-btn"
+        onClick={() => setExpanded((e) => !e)}
+        aria-expanded={expanded}
+      >
+        <span>
+          Distribution Distance
+          {flagged.length > 0 && (
+            <span className="ws-validation-section-badge ws-validation-badge-warn">
+              {flagged.length} flagged
+            </span>
+          )}
+        </span>
+        <span className={`ws-chevron${expanded ? ' ws-chevron-open' : ''}`}>
+          <ChevronDown size={12} strokeWidth={2.5} />
+        </span>
+      </button>
+      {expanded && (
+        <div className="ws-validation-cols">
+          {data.numericColumns.map((col) => (
+            <div key={col.column} className="ws-validation-col-row">
+              <span className="ws-validation-col-name">{col.column}</span>
+              <div className="ws-validation-mini-track">
+                <div
+                  className={`ws-validation-mini-bar ws-validation-bar-${col.status}`}
+                  style={{ width: animated ? `${Math.round((1 - col.jsDivergence) * 100)}%` : '0%' }}
+                />
+              </div>
+              <span className={`ws-validation-col-pct ws-validation-score-${col.status}`}>
+                JS {col.jsDivergence.toFixed(3)}
+              </span>
+              <StatusBadge status={col.status} />
+            </div>
+          ))}
+          {data.categoricalColumns.map((col) => (
+            <div key={col.column} className="ws-validation-col-row">
+              <span className="ws-validation-col-name">{col.column}</span>
+              <div className="ws-validation-mini-track">
+                <div
+                  className={`ws-validation-mini-bar ws-validation-bar-${col.status}`}
+                  style={{ width: animated ? (col.status === 'pass' ? '90%' : col.status === 'warn' ? '55%' : '20%') : '0%' }}
+                />
+              </div>
+              <span className={`ws-validation-col-pct ws-validation-score-${col.status}`}>
+                p={col.pValue < 0.001 ? '<0.001' : col.pValue.toFixed(3)}
+              </span>
+              <StatusBadge status={col.status} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CorrelationDriftSection({ data }: { data: CorrelationDrift }) {
+  const [expanded, setExpanded] = useState(false);
+  if (data.driftedPairs.length === 0) return null;
+
+  return (
+    <div className="ws-validation-subsection">
+      <button
+        className="ws-validation-section-btn"
+        onClick={() => setExpanded((e) => !e)}
+        aria-expanded={expanded}
+      >
+        <span>
+          Correlation Drift
+          <span className={`ws-validation-section-badge ws-validation-badge-${data.status}`}>
+            {data.driftedPairs.length} pair{data.driftedPairs.length !== 1 ? 's' : ''}
+          </span>
+        </span>
+        <span className={`ws-chevron${expanded ? ' ws-chevron-open' : ''}`}>
+          <ChevronDown size={12} strokeWidth={2.5} />
+        </span>
+      </button>
+      {expanded && (
+        <div className="ws-validation-cols">
+          {data.driftedPairs.map((pair, i) => (
+            <div key={i} className="ws-validation-col-row">
+              <span className="ws-validation-col-name" style={{ flex: '0 0 auto', maxWidth: '55%' }}>
+                {pair.columns[0]} × {pair.columns[1]}
+              </span>
+              <span className="ws-validation-col-note" style={{ marginLeft: 'auto' }}>
+                {pair.sourceCorr >= 0 ? '+' : ''}{pair.sourceCorr.toFixed(2)} → {pair.syntheticCorr >= 0 ? '+' : ''}{pair.syntheticCorr.toFixed(2)}
+              </span>
+              <StatusBadge status={pair.status} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KAnonymityRow({ data }: { data: KAnonymity }) {
+  return (
+    <div className={`ws-sanity-row ws-sanity-${data.status}`}>
+      <span className="ws-sanity-name">k-Anonymity</span>
+      <span className="ws-sanity-value">
+        min k={data.minK} over [{data.quasiIdentifiers.join(', ')}]
+        {data.groupsBelowThreshold > 0 && ` · ${data.groupsBelowThreshold} group(s) below k≥${data.kThreshold}`}
+      </span>
+      <span className={`ws-validation-badge ws-validation-badge-${data.status}`}>
+        {data.status === 'pass' ? `k≥${data.kThreshold}` : data.status === 'warn' ? `k=${data.minK}` : `k=${data.minK} Risk`}
+      </span>
+    </div>
   );
 }
 
@@ -79,6 +210,10 @@ export default function ValidationReport({ report }: Props) {
         ))}
       </div>
 
+      {report.distributionDistance && (
+        <DistributionDistanceSection data={report.distributionDistance} animated={animated} />
+      )}
+
       <button
         className="ws-validation-section-btn"
         onClick={() => setColsExpanded((e) => !e)}
@@ -111,9 +246,28 @@ export default function ValidationReport({ report }: Props) {
               {col.note && (
                 <span className="ws-validation-col-note">{col.note}</span>
               )}
+              {col.skewnessDrift !== undefined && col.skewnessDrift > 0.5 && (
+                <span className="ws-validation-col-note ws-validation-col-note-warn">
+                  skew drift {col.skewnessDrift.toFixed(2)} (src {col.sourceSkewness?.toFixed(2)} → syn {col.syntheticSkewness?.toFixed(2)})
+                </span>
+              )}
+              {col.boundaryViolations !== undefined && col.boundaryViolations > 0 && (
+                <span className="ws-validation-col-note ws-validation-col-note-warn">
+                  {col.boundaryViolations.toLocaleString()} out-of-range value{col.boundaryViolations !== 1 ? 's' : ''}
+                </span>
+              )}
+              {col.cardinalityScore !== undefined && col.cardinalityScore < 80 && (
+                <span className="ws-validation-col-note ws-validation-col-note-warn">
+                  cardinality {col.syntheticCardinality}/{col.sourceCardinality} categories ({col.cardinalityScore}%)
+                </span>
+              )}
             </div>
           ))}
         </div>
+      )}
+
+      {report.correlationDrift && (
+        <CorrelationDriftSection data={report.correlationDrift} />
       )}
 
       {report.edgeCases && report.edgeCases.length > 0 && (
@@ -165,7 +319,7 @@ export default function ValidationReport({ report }: Props) {
         </div>
       )}
 
-      {(report.duplicates || (report.diversityIssues && report.diversityIssues.length > 0)) && (
+      {(report.duplicates || (report.diversityIssues && report.diversityIssues.length > 0) || report.kAnonymity) && (
         <div className="ws-sanity-section">
           <div className="ws-sanity-label">Distribution Sanity</div>
           {report.duplicates && (
@@ -192,6 +346,7 @@ export default function ValidationReport({ report }: Props) {
               </span>
             </div>
           ))}
+          {report.kAnonymity && <KAnonymityRow data={report.kAnonymity} />}
         </div>
       )}
 

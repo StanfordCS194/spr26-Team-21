@@ -13,6 +13,26 @@ TARGET_COLUMN_CANDIDATES = ("fraud", "is_fraud", "fraud_label", "target", "label
 FEATURE_IMPORTANCE_TOP_N = 10
 FEATURE_IMPORTANCE_MAX_ROWS = 5_000
 
+# P1: Distribution distance thresholds
+JS_DIV_WARN = 0.10   # Jensen-Shannon divergence (0=identical, 1=completely different)
+JS_DIV_FAIL = 0.30
+CHI2_PVAL_WARN = 0.05
+CHI2_PVAL_FAIL = 0.01
+
+# P1: Correlation drift thresholds
+CORR_DRIFT_WARN = 0.20
+CORR_DRIFT_FAIL = 0.40
+CORR_MAX_COLS = 20
+
+# P1: k-Anonymity
+K_ANONYMITY_THRESHOLD = 5
+QI_NAME_PATTERNS = ("age", "gender", "sex", "zip", "postal", "race", "ethnicity",
+                    "dob", "birth", "state", "region", "occupation", "marital")
+
+# P2: Moment drift thresholds
+SKEW_DRIFT_WARN = 0.50
+KURT_DRIFT_WARN = 1.00
+
 #created a helper function to compare synthetic p90/p95/p99 against source p90/p95/p99 when available
 def validate_tail_preservation(col: str, stat: dict, synth_s: pd.Series) -> dict[str, Any] | None:
     if synth_s.empty:
@@ -323,6 +343,227 @@ def validate_feature_importance_overlap(
     }
 
 
+def validate_distribution_distance(
+    source_df: pd.DataFrame,
+    synth_df: pd.DataFrame,
+    source_stats: dict[str, dict],
+) -> dict[str, Any] | None:
+    """Jensen-Shannon divergence (numerics) and chi-squared (categoricals) per column.
+
+    JS divergence is 0 when distributions are identical and approaches 1 when completely
+    different. Chi-squared tests whether the categorical frequency tables are consistent.
+    Both are industry-standard complements to the KS test already in place.
+    """
+    if source_df.empty or synth_df.empty:
+        return None
+    try:
+        from scipy.spatial.distance import jensenshannon
+        from scipy.stats import chi2_contingency
+    except ImportError:
+        return {"status": "warn", "note": "scipy not installed; distribution distance could not run"}
+
+    shared_cols = [c for c in source_df.columns if c in synth_df.columns]
+    numeric_results: list[dict[str, Any]] = []
+    categorical_results: list[dict[str, Any]] = []
+
+    for col in shared_cols:
+        col_type = source_stats.get(col, {}).get("col_type", "enum")
+        src_s = source_df[col].dropna()
+        syn_s = synth_df[col].dropna()
+        if len(src_s) < 5 or len(syn_s) < 5:
+            continue
+
+        if col_type in ("int", "float"):
+            try:
+                src_num = pd.to_numeric(src_s, errors="coerce").dropna().to_numpy(dtype=float)
+                syn_num = pd.to_numeric(syn_s, errors="coerce").dropna().to_numpy(dtype=float)
+                if len(src_num) < 5 or len(syn_num) < 5:
+                    continue
+                n_bins = min(50, max(10, int(np.sqrt(len(src_num)))))
+                lo, hi = min(src_num.min(), syn_num.min()), max(src_num.max(), syn_num.max())
+                if lo == hi:
+                    continue
+                bins = np.linspace(lo, hi, n_bins + 1)
+                src_hist = np.histogram(src_num, bins=bins)[0].astype(float)
+                syn_hist = np.histogram(syn_num, bins=bins)[0].astype(float)
+                # Laplace smoothing so zero-count bins don't dominate
+                src_prob = (src_hist + 1e-9) / (src_hist.sum() + 1e-9 * n_bins)
+                syn_prob = (syn_hist + 1e-9) / (syn_hist.sum() + 1e-9 * n_bins)
+                js = float(jensenshannon(src_prob, syn_prob, base=2))
+                status = "fail" if js >= JS_DIV_FAIL else "warn" if js >= JS_DIV_WARN else "pass"
+                numeric_results.append({"column": col, "jsDivergence": round(js, 4), "status": status})
+            except Exception:
+                continue
+
+        elif col_type == "enum":
+            try:
+                src_counts = src_s.astype(str).value_counts()
+                syn_counts = syn_s.astype(str).value_counts()
+                all_cats = sorted(set(src_counts.index) | set(syn_counts.index))
+                if len(all_cats) < 2:
+                    continue
+                src_arr = np.array([src_counts.get(c, 0) for c in all_cats])
+                syn_arr = np.array([syn_counts.get(c, 0) for c in all_cats])
+                if src_arr.sum() == 0 or syn_arr.sum() == 0:
+                    continue
+                contingency = np.vstack([src_arr, syn_arr])
+                chi2, p_val, dof, _ = chi2_contingency(contingency)
+                status = "fail" if p_val < CHI2_PVAL_FAIL else "warn" if p_val < CHI2_PVAL_WARN else "pass"
+                categorical_results.append({
+                    "column": col,
+                    "chiSquared": round(float(chi2), 4),
+                    "pValue": round(float(p_val), 6),
+                    "degreesOfFreedom": int(dof),
+                    "status": status,
+                })
+            except Exception:
+                continue
+
+    if not numeric_results and not categorical_results:
+        return None
+
+    all_statuses = [r["status"] for r in numeric_results + categorical_results]
+    n_pass = sum(1 for s in all_statuses if s == "pass")
+    score = max(0, round(n_pass / len(all_statuses) * 100))
+    if "fail" in all_statuses:
+        overall = "fail"
+    elif "warn" in all_statuses:
+        overall = "warn"
+    else:
+        overall = "pass"
+
+    return {
+        "score": score,
+        "status": overall,
+        "numericColumns": numeric_results,
+        "categoricalColumns": categorical_results,
+    }
+
+
+def validate_correlation_drift(
+    source_df: pd.DataFrame,
+    synth_df: pd.DataFrame,
+    drift_warn: float = CORR_DRIFT_WARN,
+    drift_fail: float = CORR_DRIFT_FAIL,
+    max_cols: int = CORR_MAX_COLS,
+) -> dict[str, Any] | None:
+    """Compare Pearson correlation matrices between source and synthetic numeric columns.
+
+    Catches multivariate structure collapse that per-column metrics miss — e.g. when
+    two correlated features become independent in the synthetic data.
+    """
+    if source_df.empty or synth_df.empty:
+        return None
+
+    shared_numeric = [
+        c for c in source_df.columns
+        if c in synth_df.columns and pd.api.types.is_numeric_dtype(source_df[c])
+        and pd.api.types.is_numeric_dtype(synth_df[c])
+    ]
+    if len(shared_numeric) < 2:
+        return None
+
+    cols = shared_numeric[:max_cols]
+    src_corr = source_df[cols].corr(method="pearson")
+    syn_corr = synth_df[cols].corr(method="pearson")
+
+    drifted: list[dict[str, Any]] = []
+    n_pairs = 0
+    for i, col_a in enumerate(cols):
+        for col_b in cols[i + 1:]:
+            n_pairs += 1
+            src_r = float(src_corr.loc[col_a, col_b])
+            syn_r = float(syn_corr.loc[col_a, col_b])
+            if np.isnan(src_r) or np.isnan(syn_r):
+                continue
+            drift = abs(src_r - syn_r)
+            if drift >= drift_fail:
+                status = "fail"
+            elif drift >= drift_warn:
+                status = "warn"
+            else:
+                continue  # only surface pairs with notable drift
+            drifted.append({
+                "columns": [col_a, col_b],
+                "sourceCorr": round(src_r, 4),
+                "syntheticCorr": round(syn_r, 4),
+                "drift": round(drift, 4),
+                "status": status,
+            })
+
+    score = max(0, round((1 - len(drifted) / max(n_pairs, 1)) * 100))
+    if any(p["status"] == "fail" for p in drifted):
+        overall = "fail"
+    elif drifted:
+        overall = "warn"
+    else:
+        overall = "pass"
+
+    return {
+        "score": score,
+        "status": overall,
+        "colsChecked": len(cols),
+        "pairsChecked": n_pairs,
+        "driftedPairs": drifted,
+    }
+
+
+def _detect_quasi_identifiers(df: pd.DataFrame, source_stats: dict[str, dict]) -> list[str]:
+    """Heuristically identify quasi-identifier columns by name and cardinality."""
+    n = len(df)
+    qi: list[str] = []
+    for col in df.columns:
+        col_lower = col.lower()
+        name_match = any(pat in col_lower for pat in QI_NAME_PATTERNS)
+        col_type = source_stats.get(col, {}).get("col_type", "")
+        n_unique = df[col].nunique()
+        cardinality_ok = 1 < n_unique <= min(100, max(2, n // 10))
+        if name_match or (col_type == "enum" and cardinality_ok):
+            qi.append(col)
+    # Limit to 5 to avoid combinatorial explosion in groupby
+    return qi[:5]
+
+
+def validate_k_anonymity(
+    synth_df: pd.DataFrame,
+    source_stats: dict[str, dict],
+    k_threshold: int = K_ANONYMITY_THRESHOLD,
+) -> dict[str, Any] | None:
+    """Check k-anonymity over detected quasi-identifier columns.
+
+    k<5 is the common regulatory baseline (e.g., HIPAA safe-harbor guidance).
+    A low min-k means synthetic records could be re-identified via attribute combination.
+    """
+    if synth_df.empty or len(synth_df) < k_threshold:
+        return None
+
+    qi_cols = _detect_quasi_identifiers(synth_df, source_stats)
+    if not qi_cols:
+        return None
+
+    qi_df = synth_df[qi_cols].astype(str).fillna("__null__")
+    group_sizes = qi_df.groupby(qi_cols).size()
+    min_k = int(group_sizes.min())
+    n_below = int((group_sizes < k_threshold).sum())
+    total_groups = int(len(group_sizes))
+
+    if min_k < 2:
+        status = "fail"
+    elif min_k < k_threshold:
+        status = "warn"
+    else:
+        status = "pass"
+
+    return {
+        "quasiIdentifiers": qi_cols,
+        "minK": min_k,
+        "kThreshold": k_threshold,
+        "groupsBelowThreshold": n_below,
+        "totalGroups": total_groups,
+        "status": status,
+    }
+
+
 DUPLICATE_WARN_PCT = 1.0
 DUPLICATE_FAIL_PCT = 5.0
 MODE_DOMINANCE_WARN = 0.95
@@ -417,7 +658,6 @@ def validate(
             syn_cv = t_std / (abs(t_mean) + 1e-9)
             div_score = max(0, round(100 - abs(src_cv - syn_cv) / (src_cv + 1e-9) * 100))
             diversity_scores.append(div_score)
-            #j
             tail_check = validate_tail_preservation(col, stat, synth_s)
             if tail_check:
                 tail_results.append(tail_check)
@@ -425,6 +665,24 @@ def validate(
                 ks_check = validate_ks_per_column_drift(col, source_df, synth_s)
                 if ks_check:
                     ks_results.append(ks_check)
+
+            # P2: skewness and kurtosis drift
+            synth_numeric_vals = pd.to_numeric(synth_s, errors="coerce").dropna()
+            src_skew = float(stat.get("skew") or 0.0)
+            syn_skew = float(synth_numeric_vals.skew()) if len(synth_numeric_vals) > 2 else src_skew
+            skew_drift = abs(syn_skew - src_skew)
+            src_kurt = float(stat.get("kurtosis") or 0.0)
+            syn_kurt = float(synth_numeric_vals.kurtosis()) if len(synth_numeric_vals) > 3 else src_kurt
+            kurt_drift = abs(syn_kurt - src_kurt)
+
+            # P2: boundary violations
+            src_min = stat.get("min")
+            src_max = stat.get("max")
+            boundary_violations = 0
+            if src_min is not None and src_max is not None and len(synth_numeric_vals) > 0:
+                boundary_violations = int(
+                    ((synth_numeric_vals < float(src_min)) | (synth_numeric_vals > float(src_max))).sum()
+                )
 
         elif col_type == "enum":
             src_cats = set(stat.get("categories", []))
@@ -435,15 +693,33 @@ def validate(
                 missing = len(src_cats - syn_cats)
                 note = f"Missing {missing} source categor{'y' if missing == 1 else 'ies'}"
             realism_scores.append(fidelity)
-            diversity_scores.append(round(min(100, len(syn_cats) / max(len(src_cats), 1) * 100)))
+
+            # P2: cardinality preservation
+            src_card = len(src_cats)
+            syn_card = len(syn_cats)
+            card_score = round(min(100, syn_card / max(src_card, 1) * 100))
+            diversity_scores.append(card_score)
 
         status = "pass" if fidelity >= 90 else "warn" if fidelity >= 70 else "fail"
         row: dict[str, Any] = {"column": col, "fidelity": fidelity, "status": status}
         if note:
             row["note"] = note
-        #
         if tail_check:
             row["tailPreservation"] = tail_check
+
+        # P2: attach moment and boundary detail for numeric columns
+        if col_type in ("int", "float"):
+            row["skewnessDrift"] = round(skew_drift, 4)
+            row["sourceSkewness"] = round(src_skew, 4)
+            row["syntheticSkewness"] = round(syn_skew, 4)
+            row["kurtosisDrift"] = round(kurt_drift, 4)
+            if boundary_violations > 0:
+                row["boundaryViolations"] = boundary_violations
+        elif col_type == "enum":
+            row["cardinalityScore"] = card_score
+            row["sourceCardinality"] = src_card
+            row["syntheticCardinality"] = syn_card
+
         col_results.append(row)
 
 
@@ -473,6 +749,17 @@ def validate(
         if source_available
         else None
     )
+    dist_distance = (
+        validate_distribution_distance(source_df, synth_df, source_stats)
+        if source_available
+        else None
+    )
+    corr_drift = (
+        validate_correlation_drift(source_df, synth_df)
+        if source_available
+        else None
+    )
+    k_anon = validate_k_anonymity(synth_df, source_stats)
 
     if duplicates["status"] == "fail":
         diversity = min(diversity, 60)
@@ -535,6 +822,66 @@ def validate(
                 f"Top feature importance overlap passed at {feature_importance['overlapScore']:.0%} for target '{feature_importance['targetColumn']}'"
             )
 
+    if dist_distance:
+        if dist_distance.get("note"):
+            insights.append(dist_distance["note"])
+        elif dist_distance["status"] in ("warn", "fail"):
+            n_fail = sum(
+                1 for r in dist_distance.get("numericColumns", []) + dist_distance.get("categoricalColumns", [])
+                if r["status"] != "pass"
+            )
+            insights.append(
+                f"{n_fail} column(s) show distribution distance drift — JS divergence or chi-squared test flagged"
+            )
+        else:
+            insights.append(
+                f"Distribution distance checks passed (JS divergence + chi-squared) across "
+                f"{len(dist_distance.get('numericColumns', [])) + len(dist_distance.get('categoricalColumns', []))} columns"
+            )
+
+    if corr_drift:
+        if corr_drift["status"] in ("warn", "fail"):
+            n_pairs = len(corr_drift.get("driftedPairs", []))
+            insights.append(
+                f"{n_pairs} correlated column pair(s) show Pearson drift — multivariate structure may differ from source"
+            )
+        else:
+            insights.append(
+                f"Pearson correlation structure preserved across {corr_drift['colsChecked']} numeric columns"
+            )
+
+    if k_anon:
+        if k_anon["status"] in ("warn", "fail"):
+            insights.append(
+                f"k-Anonymity: min k={k_anon['minK']} over quasi-identifiers {k_anon['quasiIdentifiers']} "
+                f"(threshold k≥{k_anon['kThreshold']}) — {k_anon['groupsBelowThreshold']} group(s) below threshold"
+            )
+        else:
+            insights.append(
+                f"k-Anonymity check passed (min k={k_anon['minK']} ≥ {k_anon['kThreshold']}) "
+                f"over {k_anon['quasiIdentifiers']}"
+            )
+
+    # P2: surface skewness and boundary findings
+    skew_issues = [
+        r for r in col_results
+        if r.get("skewnessDrift", 0) > SKEW_DRIFT_WARN
+    ]
+    if skew_issues:
+        col_name = skew_issues[0]["column"]
+        drift_val = skew_issues[0]["skewnessDrift"]
+        insights.append(
+            f"'{col_name}' skewness drift of {drift_val:.2f} — tail shape may differ from source"
+        )
+
+    boundary_issues = [r for r in col_results if r.get("boundaryViolations", 0) > 0]
+    if boundary_issues:
+        col_name = boundary_issues[0]["column"]
+        n_viol = boundary_issues[0]["boundaryViolations"]
+        insights.append(
+            f"'{col_name}' has {n_viol:,} value(s) outside source min/max range — synthesiser may be extrapolating"
+        )
+
     if duplicates["status"] != "pass":
         insights.append(
             f"{duplicates['count']:,} duplicate row{'s' if duplicates['count'] != 1 else ''} "
@@ -570,4 +917,10 @@ def validate(
         result["mutualInformationRelationships"] = mi_relationships
     if feature_importance:
         result["featureImportanceComparison"] = feature_importance
+    if dist_distance:
+        result["distributionDistance"] = dist_distance
+    if corr_drift:
+        result["correlationDrift"] = corr_drift
+    if k_anon:
+        result["kAnonymity"] = k_anon
     return result
