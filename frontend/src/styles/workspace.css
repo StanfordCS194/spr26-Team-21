@@ -1239,6 +1239,15 @@
   overflow-x: auto;
   max-height: 220px;
   overflow-y: auto;
+  /* Scroll-shadow: appears only when content overflows horizontally */
+  background:
+    linear-gradient(to right, var(--surface) 20%, transparent) center left,
+    linear-gradient(to left,  var(--surface) 20%, transparent) center right,
+    radial-gradient(farthest-side at 0%   50%, rgba(0,0,0,.18), transparent) center left,
+    radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,.18), transparent) center right;
+  background-repeat: no-repeat;
+  background-size: 32px 100%, 32px 100%, 14px 100%, 14px 100%;
+  background-attachment: local, local, scroll, scroll;
 }
 
 .ws-preview-table {
@@ -1279,6 +1288,21 @@
 
 .ws-preview-table tr:hover td {
   background: rgba(255,255,255,0.02);
+}
+
+.ws-preview-th-num {
+  text-align: right;
+}
+
+.ws-preview-td-num {
+  text-align: right;
+  color: var(--text-dim);
+}
+
+.ws-preview-null {
+  color: var(--text-dim);
+  opacity: 0.45;
+  font-style: italic;
 }
 
 /* Follow-up input */

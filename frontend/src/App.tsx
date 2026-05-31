@@ -70,6 +70,7 @@ function App() {
   const [landingModelId, setLandingModelId] = useState<string | null>(null);
   const [landingSourceId, setLandingSourceId] = useState<string | null>(null);
   const [schemaInferring, setSchemaInferring] = useState(false);
+  const [schemaError, setSchemaError] = useState<string | null>(null);
 
   const activeProfile = profiles.find((p) => p.id === selectedId) ?? profiles[0];
 
@@ -84,6 +85,7 @@ function App() {
       return;
     }
     setSchemaInferring(true);
+    setSchemaError(null);
     try {
       const result = await inferSchema(files);
       if (!result.error) {
@@ -98,12 +100,14 @@ function App() {
         setLandingSourceRows(0);
         setLandingModelId(null);
         setLandingSourceId(null);
+        setSchemaError(result.error ?? 'Could not read the file — check the format and try again.');
       }
     } catch {
       setLandingSchema(null);
       setLandingStats(null);
       setLandingModelId(null);
       setLandingSourceId(null);
+      setSchemaError('Could not reach the server — check your connection and try again.');
     } finally {
       setSchemaInferring(false);
     }
@@ -255,7 +259,12 @@ function App() {
           },
         );
       } catch (e) {
-        console.error('Sourcing agent failed', e);
+        const msg = e instanceof Error ? e.message : 'Unknown error';
+        patch({
+          loading: false,
+          planText: `Connection to MongoDB failed: ${msg}. Check your credentials in the profile settings and try again.`,
+        });
+        return;
       }
 
       patch({
@@ -289,7 +298,7 @@ function App() {
             }
           : await inferSchema(groundingFiles).catch(() => null);
 
-      if (result) {
+      if (result && !result.error) {
         schema = result.columns;
         stats = result.stats;
         modelId = result.model_id ?? null;
@@ -302,6 +311,14 @@ function App() {
           edge_cases: [],
           constraints: [],
         };
+      } else {
+        patch({
+          loading: false,
+          planText: result?.error
+            ? `File upload failed: ${result.error}`
+            : 'Could not read the uploaded file — check the format (CSV, JSON, or Parquet) and try again.',
+        });
+        return;
       }
     } else if (mongoConfig) {
       // MongoDB is the active grounding source — pull the collection through the backend
@@ -324,6 +341,14 @@ function App() {
           edge_cases: [],
           constraints: [],
         };
+      } else {
+        patch({
+          loading: false,
+          planText: result?.error
+            ? `MongoDB connection failed: ${result.error}`
+            : 'Could not connect to MongoDB — check your URI and database name in the profile settings.',
+        });
+        return;
       }
     } else {
       // No grounding files — use the Prompt-to-Action agent
@@ -337,6 +362,12 @@ function App() {
           intro: result.generation_plan.intro,
           steps: result.generation_plan.steps,
         };
+      } else {
+        patch({
+          loading: false,
+          planText: 'Could not reach the planning service — check your connection and try again.',
+        });
+        return;
       }
     }
 
@@ -427,6 +458,7 @@ function App() {
           onGroundingFilesChange={handleGroundingFilesChange}
           inferredSchema={landingSchema}
           schemaInferring={schemaInferring}
+          schemaError={schemaError}
           profileSummary={profileSummary}
         />
       ) : (

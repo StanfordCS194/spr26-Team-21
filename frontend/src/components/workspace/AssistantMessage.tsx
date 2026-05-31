@@ -53,6 +53,7 @@ export default function AssistantMessage({
 
   const [previewRows, setPreviewRows] = useState<Record<string, unknown>[] | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   const [clarifyDismissed, setClarifyDismissed] = useState(false);
 
@@ -80,6 +81,7 @@ export default function AssistantMessage({
   const handlePreview = async () => {
     if (!schema || schema.length === 0) return;
     setPreviewLoading(true);
+    setPreviewError(null);
     try {
       const result = await previewDataset(
         schema,
@@ -87,8 +89,8 @@ export default function AssistantMessage({
         modelId,
       );
       setPreviewRows(result.rows);
-    } catch {
-      // non-fatal
+    } catch (err) {
+      setPreviewError(err instanceof Error ? err.message : 'Preview failed — try again.');
     } finally {
       setPreviewLoading(false);
     }
@@ -228,6 +230,9 @@ export default function AssistantMessage({
                           Preview 10 rows
                         </button>
                       </div>
+                      {previewError && (
+                        <span className="ws-gen-error">{previewError}</span>
+                      )}
 
                       {previewRows && <PreviewTable rows={previewRows} />}
 

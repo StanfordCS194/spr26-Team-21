@@ -17,6 +17,7 @@ interface LandingProps {
   onGroundingFilesChange?: (files: File[]) => void;
   inferredSchema?: SchemaColumn[] | null;
   schemaInferring?: boolean;
+  schemaError?: string | null;
   profileSummary?: { columns: number; sourceRows: number } | null;
 }
 
@@ -64,6 +65,7 @@ export default function Landing(props: LandingProps) {
     onGroundingFilesChange,
     inferredSchema,
     schemaInferring,
+    schemaError,
     profileSummary,
     ...promptProps
   } = props;
@@ -84,6 +86,9 @@ export default function Landing(props: LandingProps) {
         onGroundingFilesChange={onGroundingFilesChange}
         profileSummary={profileSummary}
       />
+      {schemaError && (
+        <p className="landing-schema-error" role="alert">{schemaError}</p>
+      )}
 
       <div className="landing-samples" role="list" aria-label="Sample prompts">
         {SAMPLE_PROMPTS.map((text) => (
