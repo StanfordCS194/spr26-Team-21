@@ -8,8 +8,9 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 from core.state import sdv_models, sessions, source_datasets
-from models.schemas import GenerateRequest
+from models.schemas import DiscoverEdgeCasesRequest, GenerateRequest
 from services.diagnostics import compute_diagnostics
+from services.edge_case_discovery import discover_edge_cases
 from services.edge_cases import apply_edge_cases, parse_edge_cases
 from services.llm_auditor import audit_sample
 from services.rule_packs import apply_pack
@@ -19,6 +20,15 @@ from services.utility import compute_utility
 from services.validation import validate
 
 router = APIRouter(prefix="/api")
+
+
+@router.post("/discover-edge-cases")
+async def discover(req: DiscoverEdgeCasesRequest):
+    """Statistical sparsity scan over the source profile. Returns a ranked list of edge cases
+    the user can approve and append to the prompt's edge_cases array."""
+    real_df = source_datasets.get(req.source_id) if req.source_id else None
+    suggestions = discover_edge_cases(req.schema_columns, req.source_stats, real_df=real_df)
+    return {"suggestions": [s.to_dict() for s in suggestions]}
 
 
 @router.post("/preview")
