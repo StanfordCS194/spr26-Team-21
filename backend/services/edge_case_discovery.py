@@ -5,15 +5,24 @@ Each suggestion's `condition_text` is in the same NL format `services/edge_cases
 already parses, so the approval flow can simply append accepted suggestions to the
 prompt's `edge_cases` array and the existing enforcer handles the rest.
 
-Phase 1 scope: four pure-statistical detectors over `source_stats` (and optionally a
-real DataFrame for conjunction detection). LLM enrichment lands in Phase 2.
+Two layers:
+  1. Pure-statistical detectors over `source_stats` (and optionally a real DataFrame
+     for conjunction detection). Always run.
+  2. Claude domain-enrichment that proposes additional patterns statistical detectors
+     can't see — column interactions, regulatory edge cases, business-critical rare
+     scenarios. Gated on ANTHROPIC_API_KEY; falls back silently if the key is missing
+     or the call fails.
 """
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass, asdict
 from typing import Any, Literal
 
 import pandas as pd
+
+from core.config import llm
 
 Severity = Literal["low", "medium", "high"]
 
@@ -41,7 +50,7 @@ NULL_LIKE_TOKENS = {"?", "", "none", "nan", "n/a", "na", "unknown", "null"}
 class EdgeCaseSuggestion:
     description: str                # human-readable summary
     condition_text: str             # NL-edge-case format — feeds parse_edge_case()
-    source_pct: float               # % of source data matching this pattern
+    source_pct: float | None        # % of source matching; None when LLM proposes without data measurement
     suggested_target_pct: float     # recommended target_fraction (as %)
     reason: str                     # one-sentence rationale
     severity: Severity
@@ -273,11 +282,18 @@ def _detect_sparse_conjunctions(
 _SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}
 
 
+def _sort_key(s: EdgeCaseSuggestion) -> tuple[int, float]:
+    # None source_pct (LLM-only) sorts last within its severity bucket — surface measurable
+    # statistical findings ahead of unverified domain hunches.
+    pct = s.source_pct if s.source_pct is not None else float("inf")
+    return (_SEVERITY_RANK[s.severity], pct)
+
+
 def _rank_and_dedupe(suggestions: list[EdgeCaseSuggestion]) -> list[EdgeCaseSuggestion]:
     """Order by severity then rarity; dedupe identical condition_text; cap total."""
     seen: set[str] = set()
     deduped: list[EdgeCaseSuggestion] = []
-    ordered = sorted(suggestions, key=lambda s: (_SEVERITY_RANK[s.severity], s.source_pct))
+    ordered = sorted(suggestions, key=_sort_key)
     for s in ordered:
         if s.condition_text in seen:
             continue
@@ -288,19 +304,207 @@ def _rank_and_dedupe(suggestions: list[EdgeCaseSuggestion]) -> list[EdgeCaseSugg
     return deduped
 
 
+# ── LLM enrichment (Phase 2) ──────────────────────────────────────────────────
+
+_LLM_MODEL = "claude-sonnet-4-6"
+_LLM_MAX_TOKENS = 1500
+_LLM_MAX_NEW_SUGGESTIONS = 5
+
+_LLM_SYSTEM_PROMPT = """\
+You are a domain expert in synthetic data generation and edge-case design for ML training datasets. \
+Given a tabular schema, a statistical summary of source data, and a list of statistical edge-case \
+suggestions that have already been identified, propose ADDITIONAL domain-important edge-case \
+patterns that pure statistical detectors cannot see.
+
+Focus on:
+- Meaningful interactions between two or more columns (e.g. high premium AND low tenure)
+- Regulatory / compliance edge cases relevant to the inferred domain
+- Rare-but-business-critical scenarios that an expert in the field would test for
+- Patterns where naive synthesis is known to fail
+
+DO NOT repeat the statistical suggestions provided. DO NOT propose patterns that require columns \
+outside the provided schema. Each `condition_text` must use the exact column names from the schema, \
+with comparison operators (`>`, `<`, `>=`, `<=`, `==`, `!=`) or the form `N+ column` for `column >= N`. \
+Connect multiple conditions with the word `and`. Optionally prefix with `N% of` to suggest a target \
+fraction (defaults to 5% if omitted).
+
+Respond ONLY with a valid JSON array (no markdown fences, no prose). Each element must have:
+  description        – short human-readable summary (~10 words)
+  condition_text     – NL condition in the format above
+  suggested_target_pct – integer or float between 1 and 30
+  reason             – one-sentence rationale (~25 words, cite domain knowledge)
+  severity           – one of: "high", "medium", "low"
+
+Return 1–5 suggestions. Quality over quantity. Skip if no defensible domain edge cases exist beyond \
+what the statistical detectors already found."""
+
+
+def _infer_domain_hint(schema_columns: list[dict]) -> str:
+    """Cheap keyword-based domain hint so Claude's reasoning is grounded."""
+    names = " ".join(c.get("column", "").lower() for c in schema_columns)
+    if any(k in names for k in ("claim", "policy", "premium", "umbrella", "incident_type", "collision")):
+        return "auto / property insurance claims"
+    if any(k in names for k in ("patient", "hba1c", "diagnosis", "icd", "ehr")):
+        return "clinical / EHR records"
+    if any(k in names for k in ("loan", "credit", "fraud", "transaction", "merchant")):
+        return "financial transactions"
+    if any(k in names for k in ("order", "product", "cart", "purchase")):
+        return "e-commerce orders"
+    return "(domain inferred from column names)"
+
+
+def _schema_for_prompt(schema_columns: list[dict]) -> str:
+    lines = []
+    for c in schema_columns[:40]:  # cap to keep tokens bounded
+        col = c.get("column", "?")
+        col_type = c.get("type", "?")
+        dist = c.get("distribution", "")
+        line = f"- {col} ({col_type})"
+        if dist:
+            line += f" — {dist}"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _stats_summary_for_prompt(source_stats: dict[str, dict]) -> str:
+    parts = []
+    for col, stat in list(source_stats.items())[:30]:
+        if not isinstance(stat, dict):
+            continue
+        ct = stat.get("col_type")
+        if ct in ("int", "float"):
+            parts.append(
+                f"- {col} ({ct}): mean={stat.get('mean'):.2f}, std={stat.get('std'):.2f}, "
+                f"min={stat.get('min')}, max={stat.get('max')}, skew={stat.get('skew', 0):.2f}"
+            )
+        elif ct == "enum":
+            cats = stat.get("categories", [])[:6]
+            probs = stat.get("probs", [])[:6]
+            cat_str = ", ".join(f"{c}={p*100:.1f}%" for c, p in zip(cats, probs))
+            parts.append(f"- {col} (enum): {cat_str}")
+        elif ct == "bool":
+            parts.append(f"- {col} (bool): p_true={stat.get('p_true', 0):.3f}")
+        elif ct == "date":
+            parts.append(f"- {col} (date): range {stat.get('min_ts')} → {stat.get('max_ts')}")
+    return "\n".join(parts)
+
+
+def _strip_code_fences(text: str) -> str:
+    text = re.sub(r"^```(?:json)?\s*", "", text.strip())
+    text = re.sub(r"\s*```$", "", text)
+    return text.strip()
+
+
+def _validate_llm_suggestion(raw: dict, schema_column_names: set[str]) -> EdgeCaseSuggestion | None:
+    """Defensively coerce one LLM-returned dict into an EdgeCaseSuggestion, or drop it."""
+    try:
+        description = str(raw.get("description", "")).strip()
+        condition_text = str(raw.get("condition_text", "")).strip()
+        reason = str(raw.get("reason", "")).strip()
+        severity = str(raw.get("severity", "medium")).lower().strip()
+        target = float(raw.get("suggested_target_pct", 5.0))
+    except (TypeError, ValueError):
+        return None
+
+    if not description or not condition_text or not reason:
+        return None
+    if severity not in _SEVERITY_RANK:
+        severity = "medium"
+    target = max(MIN_SUGGESTED_TARGET_PCT, min(MAX_SUGGESTED_TARGET_PCT, target))
+
+    # Sanity check: at least one schema column should appear in the condition.
+    if not any(col in condition_text for col in schema_column_names):
+        return None
+
+    return EdgeCaseSuggestion(
+        description=description,
+        condition_text=condition_text,
+        source_pct=None,  # LLM didn't measure against data
+        suggested_target_pct=round(target, 1),
+        reason=reason,
+        severity=severity,  # type: ignore[arg-type]
+        detector="domain_llm",
+    )
+
+
+def _enrich_with_claude(
+    schema_columns: list[dict],
+    source_stats: dict[str, dict],
+    statistical: list[EdgeCaseSuggestion],
+) -> list[EdgeCaseSuggestion]:
+    """Ask Claude for additional domain-specific edge cases beyond what statistics caught.
+
+    Returns an empty list silently if the LLM is unavailable or the call fails. Phase 1's
+    statistical suggestions remain authoritative; LLM suggestions are layered on top.
+    """
+    if llm is None:
+        return []
+    if not schema_columns:
+        return []
+
+    domain = _infer_domain_hint(schema_columns)
+    existing = "\n".join(f"- {s.condition_text}" for s in statistical[:8]) or "(none)"
+    user_prompt = (
+        f"Domain (best guess from column names): {domain}\n\n"
+        f"Schema:\n{_schema_for_prompt(schema_columns)}\n\n"
+        f"Source-data statistical summary:\n{_stats_summary_for_prompt(source_stats)}\n\n"
+        f"Statistical detectors already proposed these edge cases — DO NOT duplicate:\n{existing}\n\n"
+        f"Return JSON only."
+    )
+
+    try:
+        msg = llm.messages.create(
+            model=_LLM_MODEL,
+            max_tokens=_LLM_MAX_TOKENS,
+            system=_LLM_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        raw_text = msg.content[0].text
+    except Exception:
+        return []
+
+    cleaned = _strip_code_fences(raw_text)
+    try:
+        items = json.loads(cleaned)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(items, list):
+        return []
+
+    schema_column_names = {c.get("column", "") for c in schema_columns if c.get("column")}
+    enriched: list[EdgeCaseSuggestion] = []
+    for raw in items[:_LLM_MAX_NEW_SUGGESTIONS]:
+        if not isinstance(raw, dict):
+            continue
+        s = _validate_llm_suggestion(raw, schema_column_names)
+        if s is not None:
+            enriched.append(s)
+    return enriched
+
+
 def discover_edge_cases(
     schema_columns: list[dict],
     source_stats: dict[str, dict],
     real_df: pd.DataFrame | None = None,
+    enrich_with_llm: bool = True,
 ) -> list[EdgeCaseSuggestion]:
-    """Run all statistical detectors over the source profile and return a ranked suggestion list."""
-    raw: list[EdgeCaseSuggestion] = []
+    """Run statistical detectors, then (optionally) layer Claude domain-enrichment on top.
+
+    Returns a ranked, deduped suggestion list. LLM enrichment is silent-fallback: if the
+    API key is missing or the call fails, the statistical suggestions still ship.
+    """
+    statistical: list[EdgeCaseSuggestion] = []
     for col_name, stat in (source_stats or {}).items():
         if not isinstance(stat, dict):
             continue
-        raw.extend(_detect_sparse_categorical(col_name, stat))
-        raw.extend(_detect_tail_outliers(col_name, stat))
-        raw.extend(_detect_class_imbalance(col_name, stat))
+        statistical.extend(_detect_sparse_categorical(col_name, stat))
+        statistical.extend(_detect_tail_outliers(col_name, stat))
+        statistical.extend(_detect_class_imbalance(col_name, stat))
 
-    raw.extend(_detect_sparse_conjunctions(real_df, schema_columns))
-    return _rank_and_dedupe(raw)
+    statistical.extend(_detect_sparse_conjunctions(real_df, schema_columns))
+
+    llm_suggestions: list[EdgeCaseSuggestion] = []
+    if enrich_with_llm:
+        llm_suggestions = _enrich_with_claude(schema_columns, source_stats, statistical)
+
+    return _rank_and_dedupe(statistical + llm_suggestions)
