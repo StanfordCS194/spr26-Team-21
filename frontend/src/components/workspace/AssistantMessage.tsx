@@ -7,6 +7,7 @@ import SchemaCard from './SchemaCard';
 import SchemaInferenceProgress from './SchemaInferenceProgress';
 import ValidationReport from './ValidationReport';
 import DiagnosticsPanel from './DiagnosticsPanel';
+import EdgeCaseSuggestions from './EdgeCaseSuggestions';
 import ClarifyingQuestions from './ClarifyingQuestions';
 import PreviewTable from './PreviewTable';
 import { Download, FileIcon } from '../icons/Icons';
@@ -57,6 +58,9 @@ export default function AssistantMessage({
 
   const [clarifyDismissed, setClarifyDismissed] = useState(false);
 
+  // Approved edge-case discovery suggestions, merged into edge_cases on preview + generate.
+  const [approvedSuggestions, setApprovedSuggestions] = useState<string[]>([]);
+
   const hasClarifying = (clarifyingQuestions?.length ?? 0) > 0 && !clarifyDismissed;
 
   // Sync the legacy 3-step agent panel with real user-driven actions:
@@ -78,6 +82,12 @@ export default function AssistantMessage({
     });
   }, [agents, approval, previewLoading]);
 
+  const mergedEdgeCases = () => {
+    const base = generationSpec?.edge_cases ?? [];
+    const seen = new Set(base);
+    return [...base, ...approvedSuggestions.filter((c) => !seen.has(c))];
+  };
+
   const handlePreview = async () => {
     if (!schema || schema.length === 0) return;
     setPreviewLoading(true);
@@ -87,6 +97,7 @@ export default function AssistantMessage({
         schema,
         (sourceStats as SourceStats) ?? {},
         modelId,
+        mergedEdgeCases(),
       );
       setPreviewRows(result.rows);
     } catch (err) {
@@ -107,7 +118,7 @@ export default function AssistantMessage({
         rowCount,
         originalPrompt ?? '',
         format,
-        generationSpec?.edge_cases ?? [],
+        mergedEdgeCases(),
         modelId,
         sourceId,
       );
@@ -175,6 +186,16 @@ export default function AssistantMessage({
             {schema && (
               <>
                 <SchemaCard rows={schema} source={schemaSource} />
+
+                {sourceStats && Object.keys(sourceStats).length > 0 && (
+                  <EdgeCaseSuggestions
+                    schemaColumns={schema}
+                    sourceStats={sourceStats as SourceStats}
+                    sourceId={sourceId}
+                    approvedConditions={approvedSuggestions}
+                    onApprovedChange={setApprovedSuggestions}
+                  />
+                )}
 
                 {hasClarifying && clarifyingQuestions && (
                   <ClarifyingQuestions
