@@ -676,6 +676,88 @@ def _render_diagnostics_section(diagnostics: dict | None) -> str:
     )
 
 
+def _render_discovery_section(
+    discovered_suggestions: list[dict] | None,
+    edge_cases_requested: list[str] | None,
+) -> str:
+    """Show the discover → suggest → user-approve story: which patterns were detected,
+    which the user accepted, which were declined."""
+    if not discovered_suggestions:
+        return (
+            '<p class="muted">No edge-case discovery results recorded for this generation. '
+            'Discovery runs automatically when source data is provided.</p>'
+        )
+
+    accepted_set = set(edge_cases_requested or [])
+    accepted_rows: list[str] = []
+    declined_rows: list[str] = []
+
+    for s in discovered_suggestions:
+        condition = str(s.get("condition_text", ""))
+        is_accepted = condition in accepted_set
+        severity = str(s.get("severity", "low")).lower()
+        detector = str(s.get("detector", ""))
+        source_pct = s.get("source_pct")
+        target_pct = s.get("suggested_target_pct", "—")
+        reason = str(s.get("reason", ""))
+        src_text = f"{source_pct}%" if source_pct is not None else "—"
+
+        row = (
+            f'<tr>'
+            f'<td class="mono">{escape(condition)}</td>'
+            f'<td class="num">{src_text}</td>'
+            f'<td class="num">{target_pct}%</td>'
+            f'<td><span class="pill pill-{severity}">{severity.upper()}</span></td>'
+            f'<td class="muted">{escape(detector)}</td>'
+            f'<td class="muted">{escape(reason)}</td>'
+            f'</tr>'
+        )
+        if is_accepted:
+            accepted_rows.append(row)
+        else:
+            declined_rows.append(row)
+
+    def _table(rows: list[str]) -> str:
+        return (
+            '<table class="data-table"><thead><tr>'
+            '<th>Condition</th><th>Source %</th><th>Target %</th>'
+            '<th>Severity</th><th>Detector</th><th>Rationale</th>'
+            '</tr></thead><tbody>'
+            + "".join(rows)
+            + '</tbody></table>'
+        )
+
+    n_total = len(discovered_suggestions)
+    n_accepted = len(accepted_rows)
+    n_declined = len(declined_rows)
+    summary_status = "pass" if n_accepted > 0 else "warn"
+    summary = (
+        f'<div class="discovery-headline">'
+        f'<span class="pill pill-{summary_status}">'
+        f'{n_accepted} of {n_total} suggestion{"s" if n_total != 1 else ""} accepted'
+        f'</span>'
+        f'<div class="muted" style="margin-top:6px;">'
+        f'Aperture scanned the source profile and proposed {n_total} edge-case pattern'
+        f'{"s" if n_total != 1 else ""}; the user accepted {n_accepted} for enforcement.'
+        f'</div>'
+        f'</div>'
+    )
+
+    accepted_block = (
+        f'<div class="diag-subsection"><h3>Accepted &amp; Enforced</h3>{_table(accepted_rows)}</div>'
+        if accepted_rows
+        else '<div class="diag-subsection"><h3>Accepted &amp; Enforced</h3>'
+             '<p class="muted">No discovered suggestions were accepted on this run.</p></div>'
+    )
+    declined_block = (
+        f'<div class="diag-subsection"><h3>Suggested But Not Enforced</h3>{_table(declined_rows)}</div>'
+        if declined_rows
+        else ''
+    )
+
+    return summary + accepted_block + declined_block
+
+
 def render_html_report(session: dict) -> str:
     """Render a self-contained, printable HTML report for one generated dataset."""
     validation = session.get("validation", {}) or {}
@@ -698,11 +780,13 @@ def render_html_report(session: dict) -> str:
     rule_pack = session.get("rule_pack")
     audit = session.get("audit")
     diagnostics = session.get("diagnostics")
+    discovered_suggestions = session.get("discovered_suggestions")
 
     utility_section = _render_utility_section(utility)
     rule_pack_section = _render_rule_pack_section(rule_pack)
     audit_section = _render_audit_section(audit)
     diagnostics_section = _render_diagnostics_section(diagnostics)
+    discovery_section = _render_discovery_section(discovered_suggestions, edge_cases_requested)
 
     # Metrics cards
     metric_cards = "".join(
@@ -926,7 +1010,7 @@ def render_html_report(session: dict) -> str:
     grid-template-columns: repeat(3, 1fr);
     gap: 12px;
   }}
-  .utility-headline, .rule-pack-headline {{
+  .utility-headline, .rule-pack-headline, .discovery-headline {{
     background: var(--surface);
     border: 1px solid var(--border);
     padding: 14px 18px;
@@ -1201,6 +1285,11 @@ def render_html_report(session: dict) -> str:
   <section>
     <h2>Semantic Audit</h2>
     {audit_section}
+  </section>
+
+  <section>
+    <h2>Discovered Edge Cases</h2>
+    {discovery_section}
   </section>
 
   <section>

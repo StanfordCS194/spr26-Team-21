@@ -195,6 +195,7 @@ export async function generate(
   edgeCases: string[] = [],
   modelId?: string | null,
   sourceId?: string | null,
+  discoveredSuggestions: EdgeCaseSuggestion[] = [],
 ): Promise<GenerateResponse> {
   const res = await fetch(`${BASE}/generate`, {
     method: 'POST',
@@ -208,6 +209,7 @@ export async function generate(
       edge_cases: edgeCases,
       model_id: modelId ?? null,
       source_id: sourceId ?? null,
+      discovered_suggestions: discoveredSuggestions,
     }),
   });
   if (!res.ok) throw new Error(`Generation failed: ${res.statusText}`);

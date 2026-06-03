@@ -20,6 +20,7 @@ import {
   reportUrl,
   type GenerateResponse,
   type SourceStats,
+  type EdgeCaseSuggestion,
 } from '../../api/client';
 
 type Props = Extract<WorkspaceMessage, { role: 'assistant' }>;
@@ -60,6 +61,9 @@ export default function AssistantMessage({
 
   // Approved edge-case discovery suggestions, merged into edge_cases on preview + generate.
   const [approvedSuggestions, setApprovedSuggestions] = useState<string[]>([]);
+  // Full discovered-suggestion list (regardless of approval) — passed through to /api/generate
+  // so the Trust Report can render the "Discovered Edge Cases" section.
+  const [discoveredSuggestions, setDiscoveredSuggestions] = useState<EdgeCaseSuggestion[]>([]);
 
   const hasClarifying = (clarifyingQuestions?.length ?? 0) > 0 && !clarifyDismissed;
 
@@ -121,6 +125,7 @@ export default function AssistantMessage({
         mergedEdgeCases(),
         modelId,
         sourceId,
+        discoveredSuggestions,
       );
       setApproval('validating');
       await new Promise<void>((r) => window.setTimeout(r, 800));
@@ -194,6 +199,7 @@ export default function AssistantMessage({
                     sourceId={sourceId}
                     approvedConditions={approvedSuggestions}
                     onApprovedChange={setApprovedSuggestions}
+                    onSuggestionsLoaded={setDiscoveredSuggestions}
                   />
                 )}
 
