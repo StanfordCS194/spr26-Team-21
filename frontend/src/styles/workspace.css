@@ -1922,3 +1922,192 @@
   margin-bottom: 6px;
   line-height: 1.5;
 }
+
+/* ── Edge-Case Discovery (chip strip) ─────────────────────────────────── */
+
+.ws-eds-card {
+  margin-top: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 18px;
+}
+
+.ws-eds-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.ws-eds-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+
+.ws-eds-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ws-eds-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0 14px;
+}
+
+.ws-eds-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 8px 0;
+}
+
+.ws-eds-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ws-eds-chip {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 6px;
+  padding: 0;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.ws-eds-chip-high { border-left-color: #c0524a; }
+.ws-eds-chip-medium { border-left-color: #c89b3c; }
+.ws-eds-chip-low { border-left-color: #6b7a8f; }
+
+.ws-eds-chip:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ws-eds-chip-approved {
+  background: rgba(122, 154, 109, 0.08);
+  border-color: rgba(122, 154, 109, 0.4);
+}
+
+.ws-eds-chip-approved.ws-eds-chip-high { border-left-color: #7a9a6d; }
+.ws-eds-chip-approved.ws-eds-chip-medium { border-left-color: #7a9a6d; }
+.ws-eds-chip-approved.ws-eds-chip-low { border-left-color: #7a9a6d; }
+
+.ws-eds-chip-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 10px 14px;
+  font: inherit;
+  text-align: left;
+  min-width: 0;
+}
+
+.ws-eds-chip-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.ws-eds-chip-approved .ws-eds-chip-icon {
+  background: var(--accent);
+  color: white;
+}
+
+.ws-eds-chip-condition {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-eds-chip-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.ws-eds-chip-source {
+  font-family: var(--mono);
+}
+
+.ws-eds-chip-sep {
+  opacity: 0.5;
+}
+
+.ws-eds-chip-severity {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.ws-eds-sev-high { color: #d97c75; }
+.ws-eds-sev-medium { color: #d8b465; }
+.ws-eds-sev-low { color: #9aa6b8; }
+
+.ws-eds-chip-why {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 0 14px;
+  cursor: pointer;
+  height: 100%;
+}
+
+.ws-eds-chip-why:hover {
+  color: var(--text);
+}
+
+.ws-eds-chip-reason {
+  grid-column: 1 / -1;
+  padding: 10px 16px 12px 40px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  line-height: 1.5;
+}
+
+.ws-eds-chip-reason-tag {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.ws-eds-footer {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}

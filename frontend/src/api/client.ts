@@ -168,6 +168,7 @@ export async function previewDataset(
   schemaColumns: SchemaColumn[],
   sourceStats: SourceStats,
   modelId?: string | null,
+  edgeCases: string[] = [],
 ): Promise<{ rows: Record<string, unknown>[] }> {
   const res = await fetch(`${BASE}/preview`, {
     method: 'POST',
@@ -178,6 +179,7 @@ export async function previewDataset(
       row_count: 10,
       prompt: '',
       model_id: modelId ?? null,
+      edge_cases: edgeCases,
     }),
   });
   if (!res.ok) throw new Error(`Preview failed: ${res.statusText}`);
@@ -218,6 +220,42 @@ export function downloadUrl(sessionId: string): string {
 
 export function reportUrl(sessionId: string): string {
   return `${BASE}/report/${sessionId}`;
+}
+
+// ── Edge-case discovery ──────────────────────────────────────────────────
+
+export type EdgeCaseSeverity = 'high' | 'medium' | 'low';
+
+export interface EdgeCaseSuggestion {
+  description: string;
+  condition_text: string;
+  source_pct: number | null;
+  suggested_target_pct: number;
+  reason: string;
+  severity: EdgeCaseSeverity;
+  detector: string;
+}
+
+export interface DiscoverEdgeCasesResponse {
+  suggestions: EdgeCaseSuggestion[];
+}
+
+export async function discoverEdgeCases(
+  schemaColumns: SchemaColumn[],
+  sourceStats: SourceStats,
+  sourceId?: string | null,
+): Promise<DiscoverEdgeCasesResponse> {
+  const res = await fetch(`${BASE}/discover-edge-cases`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      schema_columns: schemaColumns,
+      source_stats: sourceStats,
+      source_id: sourceId ?? null,
+    }),
+  });
+  if (!res.ok) throw new Error(`Edge-case discovery failed: ${res.statusText}`);
+  return res.json();
 }
 
 export interface MongoTestResponse {
