@@ -14,6 +14,7 @@ interface Props {
   sourceId?: string | null;
   approvedConditions: string[];
   onApprovedChange: (next: string[]) => void;
+  onSuggestionsLoaded?: (suggestions: EdgeCaseSuggestion[]) => void;
 }
 
 type Status = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
@@ -43,6 +44,7 @@ export default function EdgeCaseSuggestions({
   sourceId,
   approvedConditions,
   onApprovedChange,
+  onSuggestionsLoaded,
 }: Props) {
   const [status, setStatus] = useState<Status>('idle');
   const [suggestions, setSuggestions] = useState<EdgeCaseSuggestion[]>([]);
@@ -64,10 +66,12 @@ export default function EdgeCaseSuggestions({
         if (!resp.suggestions || resp.suggestions.length === 0) {
           setStatus('empty');
           setSuggestions([]);
+          onSuggestionsLoaded?.([]);
           return;
         }
         setSuggestions(resp.suggestions);
         setStatus('ready');
+        onSuggestionsLoaded?.(resp.suggestions);
       })
       .catch((err) => {
         if (cancelled) return;
