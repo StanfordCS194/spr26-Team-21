@@ -13,7 +13,11 @@ from services.diagnostics import compute_diagnostics
 from services.edge_case_discovery import discover_edge_cases
 from services.edge_cases import apply_edge_cases, parse_edge_cases
 from services.llm_auditor import audit_sample
-from services.privacy_attacks import compute_anonymeter_risks
+from services.privacy_attacks import (
+    compose_privacy_ensemble,
+    compute_anonymeter_risks,
+    compute_density_mia,
+)
 from services.rule_packs import apply_pack
 from services.synthesis import synthesize
 from services.trust_report import render_html_report
@@ -102,9 +106,30 @@ async def generate(req: GenerateRequest):
     # Semantic auditor (heuristic stub; LLM hook in services/llm_auditor.py).
     audit = audit_sample(synth_df, rule_pack_report=rule_report, use_llm=False)
 
+    # Holdout slice = original source minus the training rows the SDV model saw.
+    # Used as the "control" set for Anonymeter (better-calibrated risk estimates)
+    # and as the "reference" distribution for DOMIAS density-MIA.
+    full_source = source_datasets.get(req.source_id) if req.source_id else None
+    if full_source is not None and real_df is not None:
+        holdout_df = full_source.drop(real_df.index, errors="ignore")
+        if len(holdout_df) > 2000:
+            holdout_df = holdout_df.sample(2000, random_state=42)
+    else:
+        holdout_df = None
+
     # GDPR-aligned privacy attacks: singling-out, linkability, attribute inference.
-    # Skipped silently if anonymeter is not installed or source data is unavailable.
-    privacy_attacks = compute_anonymeter_risks(real_df, synth_df, n_attacks=100, target_col=req.label_col)
+    privacy_attacks = compute_anonymeter_risks(
+        real_df, synth_df, holdout_df, n_attacks=100, target_col=req.label_col,
+    )
+
+    # DOMIAS-style density-based MIA — catches local overfitting that nearest-neighbour
+    # distance MIA in services/privacy.py would miss.
+    density_mia = compute_density_mia(real_df, synth_df, holdout_df)
+
+    # Ensemble verdict combining all available attack families into one tier.
+    # The first arg (distance-based MIA from services.privacy) lives on a sibling
+    # branch; pass None until it merges. compose_privacy_ensemble degrades gracefully.
+    privacy_ensemble = compose_privacy_ensemble(None, privacy_attacks, density_mia)
 
     file_size_kb = round(len(data_bytes) / 1024, 1)
     filename = f"aperture_output.{fmt}"
@@ -125,6 +150,8 @@ async def generate(req: GenerateRequest):
         "rule_pack": rule_report,
         "audit": audit,
         "privacy_attacks": privacy_attacks,
+        "density_mia": density_mia,
+        "privacy_ensemble": privacy_ensemble,
         "row_count": n,
         "file_size_kb": file_size_kb,
         "filename": filename,
@@ -143,6 +170,8 @@ async def generate(req: GenerateRequest):
         "rule_pack": rule_report,
         "audit": audit,
         "privacy_attacks": privacy_attacks,
+        "density_mia": density_mia,
+        "privacy_ensemble": privacy_ensemble,
         "created_at": created_at,
     }
 

@@ -41,6 +41,15 @@ try:
 except ImportError:
     _ANONYMETER_AVAILABLE = False
 
+try:
+    import numpy as np
+    from sklearn.metrics import roc_auc_score, roc_curve
+    from sklearn.neighbors import KernelDensity
+    from sklearn.preprocessing import LabelEncoder, StandardScaler
+    _SKLEARN_AVAILABLE = True
+except ImportError:
+    _SKLEARN_AVAILABLE = False
+
 _DEFAULT_N_ATTACKS = 500
 _DEFAULT_SO_NCOLS = 3  # attribute combinations of size 3 for singling-out
 _DEFAULT_LINK_NEIGHBORS = 10
@@ -175,6 +184,103 @@ def _summary_verdict(attacks: dict[str, Any]) -> str:
     return f"worst-attack risk {worst:.2f} ({_interpret(worst)})"
 
 
+# ── DOMIAS-style density-based MIA ────────────────────────────────────────────
+# van Breugel et al., AISTATS 2023. Core idea: if a generator overfits, it
+# assigns HIGHER density to its training records than to non-training records,
+# relative to a reference distribution. The attack:
+#
+#   1. fit p_S, a density estimator on the synthetic data
+#   2. fit p_R, a density estimator on a held-out reference (non-training real)
+#   3. score each candidate record x by log p_S(x) - log p_R(x); higher → more
+#      likely a training-set member
+#   4. ROC-AUC of that score discriminating training members from non-members
+#
+# Distance-based MIA (in services/privacy.py) only sees one nearest neighbour.
+# DOMIAS sees the WHOLE synthetic distribution, so it catches local overfitting
+# that a single-neighbour test misses.
+
+_DOMIAS_MAX_ROWS = 1500
+_DOMIAS_KDE_BANDWIDTH = 0.3
+
+
+def _encode_for_density(
+    df: pd.DataFrame, encoders: dict | None = None, scaler: "StandardScaler | None" = None,
+) -> "tuple[np.ndarray, dict, StandardScaler]":
+    """Label-encode object columns and z-score everything so KDE bandwidth is meaningful."""
+    encoders = encoders or {}
+    out = df.copy()
+    for col in out.select_dtypes(include="object").columns:
+        if col not in encoders:
+            encoders[col] = LabelEncoder().fit(out[col].astype(str))
+        known = set(encoders[col].classes_)
+        out[col] = out[col].astype(str).map(lambda v: encoders[col].transform([v])[0] if v in known else -1)
+    arr = out.apply(pd.to_numeric, errors="coerce").fillna(0.0).to_numpy(float)
+    if scaler is None:
+        scaler = StandardScaler().fit(arr)
+    return scaler.transform(arr), encoders, scaler
+
+
+def compute_density_mia(
+    real_df: pd.DataFrame | None,
+    synth_df: pd.DataFrame,
+    holdout_df: pd.DataFrame | None,
+    n_neighbors_skipped: int = 0,
+) -> dict[str, Any] | None:
+    """DOMIAS-style MIA: density ratio between synthetic and a held-out reference.
+
+    Requires a non-training holdout slice (otherwise can't form a reference
+    distribution). Returns None if either holdout or sklearn is unavailable.
+    """
+    if not _SKLEARN_AVAILABLE or real_df is None or holdout_df is None:
+        return None
+    if len(real_df) < 50 or len(synth_df) < 50 or len(holdout_df) < 50:
+        return None
+    common = [c for c in real_df.columns if c in synth_df.columns and c in holdout_df.columns]
+    if not common:
+        return None
+
+    real = real_df[common].sample(min(_DOMIAS_MAX_ROWS, len(real_df)), random_state=42).reset_index(drop=True)
+    synth = synth_df[common].sample(min(_DOMIAS_MAX_ROWS, len(synth_df)), random_state=42).reset_index(drop=True)
+    holdout = holdout_df[common].sample(min(_DOMIAS_MAX_ROWS, len(holdout_df)), random_state=42).reset_index(drop=True)
+
+    synth_arr, encoders, scaler = _encode_for_density(synth)
+    real_arr, _, _ = _encode_for_density(real, encoders, scaler)
+    holdout_arr, _, _ = _encode_for_density(holdout, encoders, scaler)
+
+    p_synth = KernelDensity(bandwidth=_DOMIAS_KDE_BANDWIDTH).fit(synth_arr)
+    p_ref = KernelDensity(bandwidth=_DOMIAS_KDE_BANDWIDTH).fit(holdout_arr)
+
+    # Score each candidate by log p_synth - log p_ref (higher → more likely a member).
+    real_scores = p_synth.score_samples(real_arr) - p_ref.score_samples(real_arr)
+    nonmember_scores = p_synth.score_samples(holdout_arr) - p_ref.score_samples(holdout_arr)
+
+    scores = np.concatenate([real_scores, nonmember_scores])
+    labels = np.concatenate([np.ones(len(real_scores)), np.zeros(len(nonmember_scores))])
+    auc = float(roc_auc_score(labels, scores))
+    fpr, tpr, _ = roc_curve(labels, scores)
+    tpr_at_1pct = float(tpr[int(np.argmin(np.abs(fpr - 0.01)))])
+
+    if auc < 0.55:
+        verdict = "attacker near chance"
+    elif auc < 0.65:
+        verdict = "mild density-based leakage"
+    elif auc < 0.75:
+        verdict = "moderate density-based leakage"
+    else:
+        verdict = "strong density-based leakage"
+
+    return {
+        "available": True,
+        "attack": "DOMIAS",
+        "roc_auc": round(auc, 4),
+        "tpr_at_1pct_fpr": round(tpr_at_1pct, 4),
+        "n_members": int(len(real_scores)),
+        "n_nonmembers": int(len(nonmember_scores)),
+        "bandwidth": _DOMIAS_KDE_BANDWIDTH,
+        "interpretation": verdict,
+    }
+
+
 def compute_anonymeter_risks(
     real_df: pd.DataFrame | None,
     synth_df: pd.DataFrame,
@@ -226,4 +332,84 @@ def compute_anonymeter_risks(
         "target_column": target,
         "attacks": attacks,
         "verdict": _summary_verdict(attacks),
+    }
+
+
+# ── Ensemble verdict over all available attacks ──────────────────────────────
+
+
+def compose_privacy_ensemble(
+    privacy: dict | None,
+    privacy_attacks: dict | None,
+    density_mia: dict | None,
+) -> dict[str, Any]:
+    """Combine signals from all attack families into a single privacy verdict.
+
+    Three sources, four numbers:
+      - distance-based MIA AUC (from services.privacy)
+      - DOMIAS density-MIA AUC (this module)
+      - Anonymeter singling-out / linkability / inference risks (this module)
+
+    The ensemble verdict tier is:
+      - severe : any distance-MIA AUC >= 0.7 OR any Anonymeter risk >= 0.50 OR
+                 exact-match duplicates > 0
+      - elevated: any distance-MIA AUC >= 0.6 OR any DOMIAS AUC >= 0.65 OR any
+                  Anonymeter risk >= 0.30
+      - clean   : otherwise
+
+    The verdict is intentionally conservative — one strong signal across any
+    attack family is enough to flag.
+    """
+    signals = []
+    severe = False
+    elevated = False
+
+    if privacy and privacy.get("available"):
+        mia = (privacy.get("membership_inference") or {})
+        dcr = privacy.get("dcr") or {}
+        if mia.get("available"):
+            auc = mia.get("roc_auc", 0.5)
+            signals.append(("distance_mia_auc", auc))
+            if auc >= 0.7:
+                severe = True
+            elif auc >= 0.6:
+                elevated = True
+        if dcr.get("n_exact_matches", 0) > 0:
+            signals.append(("exact_matches", dcr["n_exact_matches"]))
+            severe = True
+
+    if density_mia and density_mia.get("available"):
+        auc = density_mia.get("roc_auc", 0.5)
+        signals.append(("domias_auc", auc))
+        if auc >= 0.65:
+            elevated = True
+        if auc >= 0.75:
+            severe = True
+
+    if privacy_attacks and privacy_attacks.get("available"):
+        for name, atk in (privacy_attacks.get("attacks") or {}).items():
+            if isinstance(atk, dict) and "value" in atk:
+                signals.append((f"anonymeter_{name}", atk["value"]))
+                if atk["value"] >= 0.50:
+                    severe = True
+                elif atk["value"] >= 0.30:
+                    elevated = True
+
+    if severe:
+        tier = "severe"
+    elif elevated:
+        tier = "elevated"
+    else:
+        tier = "clean"
+
+    headlines = {
+        "severe": "Privacy ensemble: SEVERE risk — at least one attack succeeded",
+        "elevated": "Privacy ensemble: ELEVATED risk — measurable leakage on at least one attack",
+        "clean": "Privacy ensemble: all attacks at or near chance",
+    }
+    return {
+        "tier": tier,
+        "headline": headlines[tier],
+        "n_signals": len(signals),
+        "signals": [{"name": n, "value": float(v)} for n, v in signals],
     }
