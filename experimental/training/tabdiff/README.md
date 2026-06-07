@@ -14,13 +14,31 @@ A 5-seed Sherlock sweep for [TabDiff](https://github.com/MinkaiXu/TabDiff). TabD
 
 ## Sherlock prerequisites
 
-The TabDiff repo is cloned to `/scratch/groups/rbaltman/mstojkov/tabdiff/`. The fraud_oracle CSV and its Info JSON are already staged at:
+The TabDiff repo is cloned to `/scratch/groups/rbaltman/mstojkov/tabdiff/`. The fraud_oracle CSV and its Info JSON are staged at:
 ```
 /scratch/groups/rbaltman/mstojkov/tabdiff/data/fraud_oracle/fraud_oracle.csv
 /scratch/groups/rbaltman/mstojkov/tabdiff/data/Info/fraud_oracle.json
 ```
 
-The `tabddpm` conda env is reused (torch 2.3 + cu121 + rtdl + libzero + catboost). Missing TabDiff-specific pip deps (`icecream`, `ml_collections`, `tomli`, `tomli_w`, `category_encoders`, `sdmetrics`, `prdc`) are installed inside that env on first run via `pip install --no-deps`.
+The reference Info JSON is checked in at `fraud_oracle.info.json` in this directory.
+
+### CSV preprocessing required for TabDiff
+
+Three adaptations were needed before TabDiff's `process_dataset.py` would accept fraud_oracle.csv (the upstream Kaggle download is otherwise fine for TabSyn / TabDDPM):
+
+1. **Strip the BOM.** The Kaggle CSV has a UTF-8 BOM (`﻿`) on the first byte. TabDiff reads with `pd.read_csv` default which leaves the BOM stuck to the first column name (`﻿Month`). Re-write with `encoding="utf-8-sig"`.
+2. **Drop the `PolicyNumber` row-ID column.** TabDiff requires every column to appear in either `num_col_idx`, `cat_col_idx`, or `target_col_idx`. A row identifier doesn't fit any of those and isn't a useful feature for synthesis; just remove it.
+3. **JSON needs `val_path`, `test_path`, and `column_info` keys.** TabDiff's `process_dataset.py` does `bool(info['val_path'])` and `bool(info['test_path'])` without a `.get()` guard. Both can be `null` (TabDiff then auto-splits 90/10 train/test); the keys must be present. `column_info` is a dict mapping each column name to `"float"` or `"str"`.
+
+The actual `num_col_idx` (verified against the Kaggle CSV column order) is:
+```
+[1, 7, 10, 16, 17, 18, 30]   # WeekOfMonth, WeekOfMonthClaimed, Age, RepNumber, Deductible, DriverRating, Year
+```
+24 categorical columns and `target_col_idx=[15]` (FraudFound_P) make the remaining 25.
+
+### Conda env
+
+The `tabddpm` conda env on Sherlock is reused (torch 2.3 + cu121 + rtdl + libzero + catboost). Missing TabDiff-specific pip deps (`icecream`, `ml_collections`, `tomli`, `tomli_w`, `category_encoders`, `sdmetrics`, `prdc`) are installed inside that env on first run via `pip install --no-deps`.
 
 ## Submit
 
