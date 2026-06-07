@@ -545,6 +545,65 @@ def _render_audit_section(audit: dict | None) -> str:
     )
 
 
+def _render_fidelity_section(fidelity: dict | None) -> str:
+    """Alaa et al. 2022 three-number fidelity diagnostic.
+
+    Decomposes 'is the synthetic data good' into three independent dimensions
+    that TSTR / detection-AUC cannot separately diagnose:
+      alpha-precision : in-support quality
+      beta-recall     : mode coverage (vs collapse)
+      authenticity    : not memorized
+    """
+    if fidelity is None or not fidelity.get("available"):
+        return '<p class="muted">Fidelity diagnostic unavailable. Requires a real source dataset.</p>'
+
+    alpha = fidelity.get("alpha_precision", 0.0)
+    beta = fidelity.get("beta_recall", 0.0)
+    auth = fidelity.get("authenticity", 0.0)
+
+    def _pill(v, low=0.6, mid=0.8):
+        return "fail" if v < low else ("warn" if v < mid else "pass")
+
+    rows = [
+        ('alpha-precision', alpha,
+         'fraction of synth rows inside the real-data support — low → out-of-distribution outputs'),
+        ('beta-recall', beta,
+         'fraction of real rows inside the synth-data support — low → mode collapse or missing coverage'),
+        ('authenticity', auth,
+         'fraction of synth rows whose nearest real row is farther than nearest synth row — low → memorization'),
+    ]
+    body = "".join(
+        f'<tr>'
+        f'<td>{escape(name)}</td>'
+        f'<td class="num">{v:.3f}</td>'
+        f'<td><span class="pill pill-{_pill(v, 0.85 if name == "authenticity" else 0.6)}">'
+        f'{"pass" if v >= (0.85 if name == "authenticity" else 0.8) else ("warn" if v >= (0.6 if name == "authenticity" else 0.6) else "fail")}'
+        f'</span></td>'
+        f'<td class="muted">{escape(meaning)}</td>'
+        f'</tr>'
+        for name, v, meaning in rows
+    )
+    verdict = fidelity.get("verdict", "")
+    # Worst of the three drives headline status.
+    worst = min(alpha, beta, auth)
+    overall = "pass" if worst >= 0.7 else ("warn" if worst >= 0.5 else "fail")
+    n_real = fidelity.get("n_real", 0)
+    n_synth = fidelity.get("n_synth", 0)
+    k = fidelity.get("k_neighbors", 5)
+    aq = fidelity.get("alpha_quantile", 0.95)
+    return (
+        f'<div><span class="pill pill-{overall}">{escape(verdict)}</span></div>'
+        f'<table class="data-table" style="margin-top:12px;"><thead><tr>'
+        f'<th>Metric</th><th>Value</th><th>Status</th><th>What it measures</th>'
+        f'</tr></thead><tbody>{body}</tbody></table>'
+        f'<div class="muted" style="margin-top:10px; font-size:11px;">'
+        f'k-NN support estimator with k={k}, alpha-quantile={aq}; '
+        f'{n_real} real rows scored against {n_synth} synth rows '
+        f'(Alaa, van Breugel, Saveliev, van der Schaar — ICML 2022).'
+        f'</div>'
+    )
+
+
 def _render_detection_section(detection: dict | None) -> str:
     """Real-vs-synthetic discriminator. AUC near 0.5 = indistinguishable; near 1.0 = trivially separable."""
     if detection is None or not detection.get("available"):
@@ -1089,6 +1148,7 @@ def render_html_report(session: dict) -> str:
     audit = session.get("audit")
     diagnostics = session.get("diagnostics")
     detection = session.get("detection")
+    fidelity = session.get("fidelity")
     privacy = session.get("privacy")
     privacy_attacks = session.get("privacy_attacks")
     density_mia = session.get("density_mia")
@@ -1099,6 +1159,7 @@ def render_html_report(session: dict) -> str:
     rule_pack_section = _render_rule_pack_section(rule_pack)
     audit_section = _render_audit_section(audit)
     diagnostics_section = _render_diagnostics_section(diagnostics)
+    fidelity_section = _render_fidelity_section(fidelity)
     detection_section = _render_detection_section(detection)
     privacy_section = _render_privacy_section(privacy)
     privacy_attacks_section = _render_privacy_attacks_section(privacy_attacks)
@@ -1603,6 +1664,11 @@ def render_html_report(session: dict) -> str:
   <section>
     <h2>Semantic Audit</h2>
     {audit_section}
+  </section>
+
+  <section>
+    <h2>Fidelity Diagnostic (alpha / beta / authenticity)</h2>
+    {fidelity_section}
   </section>
 
   <section>

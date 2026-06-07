@@ -12,6 +12,7 @@ from models.schemas import DiscoverEdgeCasesRequest, GenerateRequest
 from services.diagnostics import compute_diagnostics
 from services.edge_case_discovery import discover_edge_cases
 from services.edge_cases import apply_edge_cases, parse_edge_cases
+from services.fidelity_metrics import compute_fidelity_triple
 from services.llm_auditor import audit_sample
 from services.privacy_attacks import (
     compose_privacy_ensemble,
@@ -103,6 +104,11 @@ async def generate(req: GenerateRequest):
     # Experiment diagnostics: confusion matrices + observations + recommendations on top of utility.
     diagnostics = compute_diagnostics(real_df, synth_df, utility=utility, label_col=req.label_col)
 
+    # Three-number fidelity diagnostic (Alaa et al., ICML 2022): alpha-precision,
+    # beta-recall, authenticity. Decomposes "is the synthetic data good" into
+    # in-support / coverage / memorization signals that TSTR+AUC can't separate.
+    fidelity = compute_fidelity_triple(real_df, synth_df)
+
     # Semantic auditor (heuristic stub; LLM hook in services/llm_auditor.py).
     audit = audit_sample(synth_df, rule_pack_report=rule_report, use_llm=False)
 
@@ -147,6 +153,7 @@ async def generate(req: GenerateRequest):
         "validation": validation,
         "utility": utility,
         "diagnostics": diagnostics,
+        "fidelity": fidelity,
         "rule_pack": rule_report,
         "audit": audit,
         "privacy_attacks": privacy_attacks,
@@ -167,6 +174,7 @@ async def generate(req: GenerateRequest):
         "validation": validation,
         "utility": utility,
         "diagnostics": diagnostics,
+        "fidelity": fidelity,
         "rule_pack": rule_report,
         "audit": audit,
         "privacy_attacks": privacy_attacks,
