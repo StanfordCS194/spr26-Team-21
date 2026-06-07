@@ -15,7 +15,11 @@ from services.edge_case_discovery import discover_edge_cases
 from services.edge_cases import apply_edge_cases, parse_edge_cases
 from services.llm_auditor import audit_sample
 from services.privacy import compute_privacy
-from services.privacy_attacks import compute_anonymeter_risks
+from services.privacy_attacks import (
+    compose_privacy_ensemble,
+    compute_anonymeter_risks,
+    compute_density_mia,
+)
 from services.rule_packs import apply_pack
 from services.synthesis import synthesize
 from services.trust_report import render_html_report
@@ -113,8 +117,8 @@ async def generate(req: GenerateRequest):
     # Distance-based privacy: DCR + NNDR + baseline protection + distance MIA.
     privacy = compute_privacy(real_df, synth_df)
 
-    # Holdout = full source minus the rows the synthesizer trained on. Used as the
-    # control set for the Anonymeter attacks (better-calibrated risk estimates).
+    # Holdout = full source minus the training rows. Used as the Anonymeter
+    # control set and as the DOMIAS reference distribution.
     full_source = source_datasets.get(req.source_id) if req.source_id else None
     if full_source is not None and real_df is not None:
         holdout_df = full_source.drop(real_df.index, errors="ignore")
@@ -124,10 +128,16 @@ async def generate(req: GenerateRequest):
         holdout_df = None
 
     # GDPR-aligned privacy attacks (Anonymeter): singling-out, linkability, inference.
-    # Skipped silently if the anonymeter package is unavailable.
     privacy_attacks = compute_anonymeter_risks(
         real_df, synth_df, holdout_df, n_attacks=100, target_col=req.label_col,
     )
+
+    # DOMIAS-style density-based MIA — catches local overfitting that the
+    # single-neighbour distance-MIA in services/privacy.py would miss.
+    density_mia = compute_density_mia(real_df, synth_df, holdout_df)
+
+    # One-tier verdict combining distance-MIA + DOMIAS + Anonymeter attacks.
+    privacy_ensemble = compose_privacy_ensemble(privacy, privacy_attacks, density_mia)
 
     file_size_kb = round(len(data_bytes) / 1024, 1)
     filename = f"aperture_output.{fmt}"
@@ -150,6 +160,8 @@ async def generate(req: GenerateRequest):
         "audit": audit,
         "privacy": privacy,
         "privacy_attacks": privacy_attacks,
+        "density_mia": density_mia,
+        "privacy_ensemble": privacy_ensemble,
         "row_count": n,
         "file_size_kb": file_size_kb,
         "filename": filename,
@@ -170,6 +182,8 @@ async def generate(req: GenerateRequest):
         "audit": audit,
         "privacy": privacy,
         "privacy_attacks": privacy_attacks,
+        "density_mia": density_mia,
+        "privacy_ensemble": privacy_ensemble,
         "created_at": created_at,
     }
 

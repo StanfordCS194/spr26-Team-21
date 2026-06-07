@@ -676,6 +676,74 @@ def _render_privacy_section(privacy: dict | None) -> str:
     )
 
 
+def _render_density_mia_section(density_mia: dict | None) -> str:
+    """DOMIAS-style density-based MIA. Higher AUC = generator overfits to training records."""
+    if density_mia is None or not density_mia.get("available"):
+        return (
+            '<p class="muted">DOMIAS-style density-based MIA unavailable. Requires a '
+            'held-out reference slice of the source data.</p>'
+        )
+    auc = density_mia.get("roc_auc", 0.5)
+    if auc < 0.55:
+        status = "pass"
+    elif auc < 0.65:
+        status = "warn"
+    else:
+        status = "fail"
+    interp = density_mia.get("interpretation", "")
+    n_m = density_mia.get("n_members", 0)
+    n_nm = density_mia.get("n_nonmembers", 0)
+    bw = density_mia.get("bandwidth", "?")
+    return (
+        f'<div>'
+        f'<span class="pill pill-{status}">{escape(interp)} (AUC {auc:.3f})</span>'
+        f'</div>'
+        f'<table class="data-table" style="margin-top:12px;"><thead><tr>'
+        f'<th>Metric</th><th>Value</th><th>Meaning</th>'
+        f'</tr></thead><tbody>'
+        f'<tr><td>ROC-AUC</td><td class="num">{auc:.3f}</td>'
+        f'<td class="muted">density ratio (log p_synth - log p_ref) discriminating members</td></tr>'
+        f'<tr><td>TPR @ 1% FPR</td><td class="num">{density_mia.get("tpr_at_1pct_fpr", float("nan")):.3f}</td>'
+        f'<td class="muted">strict-threshold attack success</td></tr>'
+        f'</tbody></table>'
+        f'<div class="muted" style="margin-top:10px; font-size:11px;">'
+        f'Trained KDE (bandwidth {bw}) on synthetic + holdout, scored {n_m} members and {n_nm} non-members. '
+        f'Catches local overfitting that single-neighbour distance-MIA misses '
+        f'(van Breugel et al., AISTATS 2023).'
+        f'</div>'
+    )
+
+
+def _render_privacy_ensemble_section(privacy_ensemble: dict | None) -> str:
+    """Single-tier verdict combining distance-MIA, DOMIAS, and three Anonymeter attacks."""
+    if not privacy_ensemble:
+        return ""
+    tier = privacy_ensemble.get("tier", "clean")
+    status_map = {"clean": "pass", "elevated": "warn", "severe": "fail"}
+    status = status_map.get(tier, "warn")
+    headline = privacy_ensemble.get("headline", "")
+    signals = privacy_ensemble.get("signals", [])
+    if signals:
+        rows = "".join(
+            f'<tr><td class="mono">{escape(s["name"])}</td><td class="num">{s["value"]:.3f}</td></tr>'
+            for s in signals
+        )
+        table = (
+            '<table class="data-table" style="margin-top:12px;"><thead><tr>'
+            '<th>Attack signal</th><th>Value</th></tr></thead><tbody>' + rows + '</tbody></table>'
+        )
+    else:
+        table = '<p class="muted">No attacks ran.</p>'
+    return (
+        f'<div><span class="pill pill-{status}">{escape(headline)}</span></div>'
+        f'{table}'
+        f'<div class="muted" style="margin-top:10px; font-size:11px;">'
+        f'Severe if any distance-MIA AUC ≥ 0.7, any Anonymeter risk ≥ 0.50, or exact matches > 0. '
+        f'Elevated if any distance-MIA AUC ≥ 0.6, any DOMIAS AUC ≥ 0.65, or any Anonymeter risk ≥ 0.30.'
+        f'</div>'
+    )
+
+
 def _render_privacy_attacks_section(privacy_attacks: dict | None) -> str:
     """GDPR-aligned privacy attacks (Anonymeter): singling-out, linkability, inference.
 
@@ -1023,6 +1091,8 @@ def render_html_report(session: dict) -> str:
     detection = session.get("detection")
     privacy = session.get("privacy")
     privacy_attacks = session.get("privacy_attacks")
+    density_mia = session.get("density_mia")
+    privacy_ensemble = session.get("privacy_ensemble")
     discovered_suggestions = session.get("discovered_suggestions")
 
     utility_section = _render_utility_section(utility)
@@ -1032,6 +1102,8 @@ def render_html_report(session: dict) -> str:
     detection_section = _render_detection_section(detection)
     privacy_section = _render_privacy_section(privacy)
     privacy_attacks_section = _render_privacy_attacks_section(privacy_attacks)
+    density_mia_section = _render_density_mia_section(density_mia)
+    privacy_ensemble_section = _render_privacy_ensemble_section(privacy_ensemble)
     discovery_section = _render_discovery_section(discovered_suggestions, edge_cases_requested)
 
     # Metrics cards
@@ -1546,6 +1618,16 @@ def render_html_report(session: dict) -> str:
   <section>
     <h2>GDPR-Aligned Privacy Attacks</h2>
     {privacy_attacks_section}
+  </section>
+
+  <section>
+    <h2>DOMIAS-style Density-Based MIA</h2>
+    {density_mia_section}
+  </section>
+
+  <section>
+    <h2>Privacy Ensemble Verdict</h2>
+    {privacy_ensemble_section}
   </section>
 
   <section>
