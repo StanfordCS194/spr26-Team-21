@@ -140,6 +140,34 @@ def _check_rule(df: pd.DataFrame, rule: dict) -> pd.Series:
         return (df["sex"] == "M") & df["diagnosis"].astype(str).str.contains("pregnan", case=False, na=False)
     if rid == "CL4_nonneg_vitals":
         return (df[cols] < 0).any(axis=1)
+    if rid == "F1_age_range":
+        age = pd.to_numeric(df["Age"], errors="coerce")
+        return (age < 16) | (age > 100)
+    if rid == "F2_year_range":
+        return ~pd.to_numeric(df["Year"], errors="coerce").isin([1994, 1995, 1996])
+    if rid == "F3_week_of_month":
+        w = pd.to_numeric(df["WeekOfMonth"], errors="coerce")
+        return (w < 1) | (w > 5)
+    if rid == "F4_week_of_month_claimed":
+        w = pd.to_numeric(df["WeekOfMonthClaimed"], errors="coerce")
+        return (w < 1) | (w > 5)
+    if rid == "F5_driver_rating":
+        r = pd.to_numeric(df["DriverRating"], errors="coerce")
+        return (r < 1) | (r > 4)
+    if rid == "F6_deductible_vocab":
+        return ~pd.to_numeric(df["Deductible"], errors="coerce").isin([300, 400, 500, 700])
+    if rid == "F7_fraud_binary":
+        return ~pd.to_numeric(df["FraudFound_P"], errors="coerce").isin([0, 1])
+    if rid == "F8_policy_type_vocab":
+        vocab = {
+            "Sedan - All Perils", "Sedan - Collision", "Sedan - Liability",
+            "Sport - All Perils", "Sport - Collision", "Sport - Liability",
+            "Utility - All Perils", "Utility - Collision", "Utility - Liability",
+        }
+        return ~df["PolicyType"].astype(str).isin(vocab)
+    if rid == "F9_rep_number_range":
+        r = pd.to_numeric(df["RepNumber"], errors="coerce")
+        return (r < 1) | (r > 16)
     return pd.Series([False] * len(df), index=df.index)
 
 
@@ -161,10 +189,13 @@ def detect_pack(df: pd.DataFrame) -> str | None:
     cols = set(df.columns)
     insurance_signal = {"injury_claim", "property_claim", "vehicle_claim", "total_claim_amount"} & cols
     clinical_signal = {"hba1c", "diagnosis", "heart_rate"} & cols
+    fraud_oracle_signal = {"FraudFound_P", "BasePolicy", "PolicyType", "VehicleCategory"} & cols
     if len(insurance_signal) >= 2:
         return "insurance"
     if len(clinical_signal) >= 2:
         return "clinical"
+    if len(fraud_oracle_signal) >= 3:
+        return "fraud_oracle"
     return None
 
 

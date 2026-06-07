@@ -176,6 +176,115 @@ Generate a full synthetic dataset and run fidelity validation.
 
 ---
 
+## Preflight + auto-routing
+
+`POST /api/generate` now does a generator preflight step before synthesis. The request body accepts three additional fields:
+
+| Field | Type | Default | Meaning |
+|---|---|---|---|
+| `synthesizer` | `"auto" \| "gaussian_copula" \| "ctgan" \| "tvae" \| "tabddpm" \| "tabsyn" \| null` | `null` (= `auto`) | Force a specific backend, or let preflight choose. |
+| `use_llm_preflight` | `bool` | `false` | When `auto`, calls Claude (`services/generator_preflight._recommend_with_claude`) instead of the deterministic heuristic ladder. |
+| `run_preflight_only` | `bool` | `false` | Return the recommendation only — do not train, do not sample, do not create a downloadable session. |
+
+### Two routing modes
+
+`services/generator_router.prepare_training_package` dispatches into one of:
+
+- **`in_process`** — `gaussian_copula`, `ctgan`, `tvae` — SDV synthesizer fitted inside the FastAPI server. Sampling happens immediately; the response is the legacy `/api/generate` shape (validation, utility, diagnostics, rule pack, audit) plus a `preflight` block and a `mode: "in_process"` marker. Use `GET /api/download/{session_id}` to download the rows.
+- **`sbatch_offline`** — `tabddpm`, `tabsyn` — diffusion models that are too heavy to train in-process. The router writes a training package under `experimental/data/<gen>_<cuid>/` (npy arrays + `info.json` + `config.toml` for TabDDPM; CSV splits + `Info/<name>.json` for TabSyn) and returns the next-step command. No synth rows are produced server-side; the user runs `sbatch` on Sherlock.
+
+### Request — preflight only
+
+```json
+{
+  "schema_columns": [...],
+  "source_stats": {...},
+  "source_id": "src-c3f1a2b4-...",
+  "synthesizer": "auto",
+  "use_llm_preflight": false,
+  "run_preflight_only": true
+}
+```
+
+**Response**
+```json
+{
+  "mode": "preflight_only",
+  "synthesizer": "tabddpm",
+  "preflight": {
+    "generator": "tabddpm",
+    "confidence": 0.55,
+    "reasoning": "10000 rows with mostly numeric columns (60% numeric, 40% enum) and 12 total columns. TabDDPM's diffusion model captures multi-modal continuous marginals better than CTGAN/TVAE at this scale. Requires Sherlock sbatch — training is GPU-bound.",
+    "preprocessing_advice": ["hash `policy_number` before fit (PII: high)"],
+    "risks": ["high-cardinality categorical: city has 312 unique values"],
+    "estimated_train_seconds": 1800,
+    "mode": "heuristic"
+  },
+  "row_count_requested": 10000,
+  "source_id": "src-c3f1a2b4-...",
+  "created_at": "2026-05-30T12:34:56.000Z"
+}
+```
+
+### Request — auto + commit (sbatch path)
+
+When `synthesizer="auto"` (or `null`) and `run_preflight_only=false`, the picked backend determines the routing mode. If preflight recommends a sbatch-only model (e.g. TabDDPM/TabSyn) the response is:
+
+```json
+{
+  "session_id": "a1b2c3d4-...",
+  "mode": "sbatch_offline",
+  "status": "pending_offline_training",
+  "synthesizer": "tabddpm",
+  "preflight": { "...": "..." },
+  "training_dir": "/abs/path/spr26-Team-21/experimental/data/tabddpm_3f2a1b9c4d5e",
+  "files_written": [
+    "experimental/data/tabddpm_3f2a1b9c4d5e/X_num_train.npy",
+    "experimental/data/tabddpm_3f2a1b9c4d5e/X_cat_train.npy",
+    "experimental/data/tabddpm_3f2a1b9c4d5e/y_train.npy",
+    "experimental/data/tabddpm_3f2a1b9c4d5e/info.json",
+    "experimental/data/tabddpm_3f2a1b9c4d5e/config.toml"
+  ],
+  "next_step": "# Local artifacts ready at: ...\n# 1) Push to Sherlock ...\n# 3) Submit:  sbatch experimental/training/tabddpm/train.sbatch",
+  "cuid": "3f2a1b9c4d5e",
+  "row_count_requested": 10000,
+  "created_at": "2026-05-30T12:34:56.000Z"
+}
+```
+
+The `session_id` is reserved for later: once the user has trained on Sherlock and rsync'd the synth output back, a future poll endpoint can pick the data up by that id (the session has `status: "pending_offline_training"` until then).
+
+### Request — auto + commit (in-process path)
+
+If preflight recommends an SDV generator the legacy response shape applies, with two new top-level fields:
+
+```json
+{
+  "session_id": "a1b2c3d4-...",
+  "mode": "in_process",
+  "synthesizer": "gaussian_copula",
+  "preflight": { "...": "..." },
+  "row_count": 10000,
+  "file_size_kb": 842.3,
+  "format": "csv",
+  "filename": "aperture_output.csv",
+  "validation": { "...": "..." },
+  "utility": { "...": "..." },
+  "diagnostics": { "...": "..." },
+  "rule_pack": { "...": "..." },
+  "audit": { "...": "..." },
+  "created_at": "2026-05-30T12:34:56.000Z"
+}
+```
+
+### Notes
+
+- **No Claude at workflow-build time.** The preflight module loads its Claude system prompt and Anthropic client lazily; the API call only happens when a real request comes in with `use_llm_preflight=true`. Without an `ANTHROPIC_API_KEY` (or with `use_llm_preflight=false`) the heuristic ladder returns a deterministic recommendation.
+- **No diffusion training inside the server.** TabDDPM / TabSyn always write a sbatch package and exit; training is the user's `sbatch` job on Sherlock.
+- **NL-only fallback.** When no `source_id` is attached (no real data uploaded), the preflight is skipped and the legacy `services.synthesis.synthesize` statistical sampler runs.
+
+---
+
 ### `GET /api/download/{session_id}`
 Stream the generated file for a previously completed generation. Sessions are stored in memory and lost on server restart.
 

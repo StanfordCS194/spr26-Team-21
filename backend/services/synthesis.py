@@ -66,26 +66,59 @@ def build_synth_df(schema_columns: list[dict], source_stats: dict[str, dict], n:
     return pd.DataFrame(synth)
 
 
+def _post_process_sdv_like(
+    sdv_df: pd.DataFrame,
+    schema_columns: list[dict],
+    source_stats: dict[str, dict],
+) -> pd.DataFrame:
+    """Backfill any schema-required columns the backend skipped, then null-inject."""
+    actual_n = len(sdv_df)
+    for col_def in schema_columns:
+        col = col_def["column"]
+        if col not in sdv_df.columns:
+            stat = source_stats.get(col) or {"col_type": "uuid"}
+            sdv_df[col] = synth_column(col, stat, actual_n)
+    ordered = [c["column"] for c in schema_columns if c["column"] in sdv_df.columns]
+    return _inject_nulls(sdv_df[ordered], schema_columns)
+
+
 def synthesize(
     schema_columns: list[dict],
     source_stats: dict[str, dict],
     n: int,
     model_id: str | None,
+    synthesizer: str | None = None,
 ) -> pd.DataFrame:
-    """Generate `n` synthetic rows, preferring the fitted SDV model when available."""
+    """Generate `n` synthetic rows.
+
+    Routing precedence:
+    1. ``synthesizer`` (when not None / "auto") → ``services.synthesizer_router``
+       picks a concrete backend (SDV ctgan/tvae/gaussian_copula or TabDDPM).
+    2. ``model_id`` resolves to a pre-fitted SDV synthesizer cached in ``sdv_models``
+       (legacy behaviour from /api/infer-schema).
+    3. Per-column statistical fallback (``build_synth_df``).
+    """
+    if synthesizer and synthesizer != "auto":
+        # Local import keeps the router optional from a testing / partial-install standpoint.
+        from services.synthesizer_router import resolve_sampler
+
+        try:
+            sampler = resolve_sampler(synthesizer, schema_columns, source_stats, model_id=model_id)
+        except Exception:
+            sampler = None
+        if sampler is not None:
+            try:
+                routed_df = sampler(n)
+                return _post_process_sdv_like(routed_df, schema_columns, source_stats)
+            except Exception:
+                pass  # Fall through to legacy paths below.
+
     if model_id and model_id in sdv_models:
         entry = sdv_models[model_id]
-        synthesizer = entry["synthesizer"]
+        sdv_synth = entry["synthesizer"]
         try:
-            sdv_df = synthesizer.sample(num_rows=n)
-            actual_n = len(sdv_df)
-            for col_def in schema_columns:
-                col = col_def["column"]
-                if col not in sdv_df.columns:
-                    stat = source_stats.get(col) or {"col_type": "uuid"}
-                    sdv_df[col] = synth_column(col, stat, actual_n)
-            ordered = [c["column"] for c in schema_columns if c["column"] in sdv_df.columns]
-            return _inject_nulls(sdv_df[ordered], schema_columns)
+            sdv_df = sdv_synth.sample(num_rows=n)
+            return _post_process_sdv_like(sdv_df, schema_columns, source_stats)
         except Exception:
             pass  # Fall through to statistical sampler
 
