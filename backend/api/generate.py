@@ -13,6 +13,7 @@ from services.detection import compute_detection
 from services.diagnostics import compute_diagnostics
 from services.edge_case_discovery import discover_edge_cases
 from services.edge_cases import apply_edge_cases, parse_edge_cases
+from services.fidelity_metrics import compute_fidelity_triple
 from services.llm_auditor import audit_sample
 from services.privacy import compute_privacy
 from services.privacy_attacks import (
@@ -107,9 +108,12 @@ async def generate(req: GenerateRequest):
     # Experiment diagnostics: confusion matrices + observations + recommendations on top of utility.
     diagnostics = compute_diagnostics(real_df, synth_df, utility=utility, label_col=req.label_col)
 
-    # Indistinguishability detection (5th eval pillar). Trains XGBoost + LogReg
-    # discriminators to predict real-vs-synth; AUC ≈ 0.5 = indistinguishable.
+    # Indistinguishability detection (XGBoost + LogReg + ECE).
     detection = compute_detection(real_df, synth_df)
+
+    # Alaa 2022 fidelity triple: alpha-precision (in-support), beta-recall
+    # (coverage), authenticity (not memorized).
+    fidelity = compute_fidelity_triple(real_df, synth_df)
 
     # Semantic auditor (heuristic stub; LLM hook in services/llm_auditor.py).
     audit = audit_sample(synth_df, rule_pack_report=rule_report, use_llm=False)
@@ -156,6 +160,7 @@ async def generate(req: GenerateRequest):
         "utility": utility,
         "diagnostics": diagnostics,
         "detection": detection,
+        "fidelity": fidelity,
         "rule_pack": rule_report,
         "audit": audit,
         "privacy": privacy,
@@ -178,6 +183,7 @@ async def generate(req: GenerateRequest):
         "utility": utility,
         "diagnostics": diagnostics,
         "detection": detection,
+        "fidelity": fidelity,
         "rule_pack": rule_report,
         "audit": audit,
         "privacy": privacy,
