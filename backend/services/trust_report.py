@@ -676,6 +676,86 @@ def _render_privacy_section(privacy: dict | None) -> str:
     )
 
 
+def _render_privacy_attacks_section(privacy_attacks: dict | None) -> str:
+    """GDPR-aligned privacy attacks (Anonymeter): singling-out, linkability, inference.
+
+    Each attack returns a value in [0,1] where higher = worse privacy. The verdict
+    tier is taken from the worst of the three.
+    """
+    if privacy_attacks is None or not privacy_attacks.get("available"):
+        return (
+            '<p class="muted">GDPR-aligned attacks unavailable. Install the '
+            '<code>anonymeter</code> package and provide a source dataset to enable.</p>'
+        )
+
+    attacks = privacy_attacks.get("attacks") or {}
+    rows = []
+    descriptions = {
+        "singling_out": "Attacker finds a small attribute combination unique to one real record",
+        "linkability": "Attacker links two halves of an original record via the synthetic data",
+        "inference": "Attacker predicts a sensitive attribute given the rest of a record",
+    }
+
+    worst_val = 0.0
+    for name, atk in attacks.items():
+        desc = descriptions.get(name, "")
+        if isinstance(atk, dict) and "value" in atk:
+            v = atk["value"]
+            worst_val = max(worst_val, v)
+            ci = atk.get("ci") or [v, v]
+            interp = atk.get("interpretation", "")
+            rows.append(
+                f'<tr>'
+                f'<td>{escape(name.replace("_", " ").title())}</td>'
+                f'<td class="num">{v:.3f}</td>'
+                f'<td class="num">[{ci[0]:.3f}, {ci[1]:.3f}]</td>'
+                f'<td><span class="pill pill-{_pill_for_risk(v)}">{escape(interp)}</span></td>'
+                f'<td class="muted">{escape(desc)}</td>'
+                f'</tr>'
+            )
+        elif isinstance(atk, dict) and "error" in atk:
+            rows.append(
+                f'<tr><td>{escape(name.replace("_", " ").title())}</td>'
+                f'<td colspan="3" class="muted">unavailable ({escape(atk["error"])[:60]})</td>'
+                f'<td class="muted">{escape(desc)}</td></tr>'
+            )
+
+    table = (
+        '<table class="data-table" style="margin-top:12px;"><thead><tr>'
+        '<th>Attack</th><th>Risk</th><th>95% CI</th><th>Verdict</th><th>What it tests</th>'
+        '</tr></thead><tbody>' + "".join(rows) + '</tbody></table>'
+    ) if rows else '<p class="muted">No attacks completed.</p>'
+
+    verdict = privacy_attacks.get("verdict", "")
+    n_attacks = privacy_attacks.get("n_attacks", 0)
+    target = privacy_attacks.get("target_column") or "n/a"
+    disclosure = (
+        f'<div class="muted" style="margin-top:10px; font-size:11px;">'
+        f'Ran {n_attacks} attack rounds per evaluator via Anonymeter '
+        f'(Giomi et al., PoPETS 2023; GDPR Article 29 criteria). '
+        f'Inference target: <code>{escape(target)}</code>.'
+        f'</div>'
+    )
+    headline_status = _pill_for_risk(worst_val)
+
+    return (
+        f'<div>'
+        f'<span class="pill pill-{headline_status}">{escape(verdict)}</span>'
+        f'</div>'
+        f'{table}'
+        f'{disclosure}'
+    )
+
+
+def _pill_for_risk(value: float) -> str:
+    """Map an Anonymeter risk in [0,1] to pass/warn/fail."""
+    if value < 0.15:
+        return "pass"
+    if value < 0.30:
+        return "warn"
+    return "fail"
+
+
 def _render_diagnostics_section(diagnostics: dict | None) -> str:
     """Experiment diagnostics: confusion matrices + observations + recommendations."""
     if diagnostics is None or not diagnostics.get("available"):
@@ -942,6 +1022,7 @@ def render_html_report(session: dict) -> str:
     diagnostics = session.get("diagnostics")
     detection = session.get("detection")
     privacy = session.get("privacy")
+    privacy_attacks = session.get("privacy_attacks")
     discovered_suggestions = session.get("discovered_suggestions")
 
     utility_section = _render_utility_section(utility)
@@ -950,6 +1031,7 @@ def render_html_report(session: dict) -> str:
     diagnostics_section = _render_diagnostics_section(diagnostics)
     detection_section = _render_detection_section(detection)
     privacy_section = _render_privacy_section(privacy)
+    privacy_attacks_section = _render_privacy_attacks_section(privacy_attacks)
     discovery_section = _render_discovery_section(discovered_suggestions, edge_cases_requested)
 
     # Metrics cards
@@ -1459,6 +1541,11 @@ def render_html_report(session: dict) -> str:
   <section>
     <h2>Privacy &amp; Disclosure Risk</h2>
     {privacy_section}
+  </section>
+
+  <section>
+    <h2>GDPR-Aligned Privacy Attacks</h2>
+    {privacy_attacks_section}
   </section>
 
   <section>

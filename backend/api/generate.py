@@ -13,6 +13,7 @@ from services.diagnostics import compute_diagnostics
 from services.edge_case_discovery import discover_edge_cases
 from services.edge_cases import apply_edge_cases, parse_edge_cases
 from services.llm_auditor import audit_sample
+from services.privacy_attacks import compute_anonymeter_risks
 from services.rule_packs import apply_pack
 from services.synthesis import synthesize
 from services.trust_report import render_html_report
@@ -101,6 +102,10 @@ async def generate(req: GenerateRequest):
     # Semantic auditor (heuristic stub; LLM hook in services/llm_auditor.py).
     audit = audit_sample(synth_df, rule_pack_report=rule_report, use_llm=False)
 
+    # GDPR-aligned privacy attacks: singling-out, linkability, attribute inference.
+    # Skipped silently if anonymeter is not installed or source data is unavailable.
+    privacy_attacks = compute_anonymeter_risks(real_df, synth_df, n_attacks=100, target_col=req.label_col)
+
     file_size_kb = round(len(data_bytes) / 1024, 1)
     filename = f"aperture_output.{fmt}"
 
@@ -119,6 +124,7 @@ async def generate(req: GenerateRequest):
         "diagnostics": diagnostics,
         "rule_pack": rule_report,
         "audit": audit,
+        "privacy_attacks": privacy_attacks,
         "row_count": n,
         "file_size_kb": file_size_kb,
         "filename": filename,
@@ -136,6 +142,7 @@ async def generate(req: GenerateRequest):
         "diagnostics": diagnostics,
         "rule_pack": rule_report,
         "audit": audit,
+        "privacy_attacks": privacy_attacks,
         "created_at": created_at,
     }
 
