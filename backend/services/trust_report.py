@@ -43,8 +43,18 @@ def _edge_case_buckets(validation: dict) -> tuple[list[dict], list[dict], list[d
     return met, unmet, unparsed
 
 
-def classify_suitability(validation: dict, source_stats: dict | None = None) -> dict[str, Any]:
-    """Tier the dataset and produce stakeholder-readable fit / not-fit lists."""
+def classify_suitability(
+    validation: dict,
+    source_stats: dict | None = None,
+    privacy: dict | None = None,
+) -> dict[str, Any]:
+    """Tier the dataset and produce stakeholder-readable fit / not-fit lists.
+
+    `privacy` is optional; if provided (output of `compute_privacy`), the tier
+    is downgraded when the synthetic data leaks training records: exact-match
+    duplicates, near-duplicate rate above 5%, or a membership-inference attack
+    AUC above 0.6.
+    """
     realism = _metric_score(validation, "realism")
     safety = _metric_score(validation, "safety")
     diversity = _metric_score(validation, "diversity")
@@ -53,12 +63,27 @@ def classify_suitability(validation: dict, source_stats: dict | None = None) -> 
     _, unmet, _ = _edge_case_buckets(validation)
     pii_flagged = safety < 90
 
-    if pii_flagged or realism < 70 or critical_drift:
+    privacy_severe = False
+    privacy_mild = False
+    if privacy and privacy.get("available"):
+        dcr = privacy.get("dcr") or {}
+        mia = privacy.get("membership_inference") or {}
+        mia_auc = mia.get("roc_auc") if mia.get("available") else None
+        n_exact = dcr.get("n_exact_matches", 0)
+        near_dup_pct = dcr.get("near_duplicate_pct", 0.0)
+        if n_exact > 0 or (mia_auc is not None and mia_auc >= 0.7):
+            privacy_severe = True
+        elif (mia_auc is not None and mia_auc >= 0.6) or near_dup_pct >= 5.0:
+            privacy_mild = True
+
+    if pii_flagged or realism < 70 or critical_drift or privacy_severe:
         tier = "review_required"
-    elif realism >= 90 and safety >= 90 and not unmet:
+    elif realism >= 90 and safety >= 90 and not unmet and not privacy_mild:
         tier = "high_confidence"
-    elif realism >= 80 and safety >= 90:
+    elif realism >= 80 and safety >= 90 and not privacy_mild:
         tier = "moderate_confidence"
+    elif privacy_mild:
+        tier = "moderate_confidence" if realism >= 80 else "prototype_only"
     else:
         tier = "prototype_only"
 
@@ -127,6 +152,10 @@ def classify_suitability(validation: dict, source_stats: dict | None = None) -> 
         rationale_parts.append(f"{len(_failing_columns(validation))} column(s) failing fidelity")
     if unmet:
         rationale_parts.append(f"{len(unmet)} edge case(s) below target")
+    if privacy_severe:
+        rationale_parts.append("privacy failure (exact match or MIA AUC ≥ 0.7)")
+    elif privacy_mild:
+        rationale_parts.append("elevated privacy risk (MIA AUC ≥ 0.6 or ≥5% near-duplicates)")
 
     return {
         "tier": tier,
@@ -516,6 +545,137 @@ def _render_audit_section(audit: dict | None) -> str:
     )
 
 
+def _render_detection_section(detection: dict | None) -> str:
+    """Real-vs-synthetic discriminator. AUC near 0.5 = indistinguishable; near 1.0 = trivially separable."""
+    if detection is None or not detection.get("available"):
+        return '<p class="muted">Detection pillar unavailable. Requires a real source dataset and scikit-learn installed.</p>'
+
+    xgb = detection.get("xgboost") or {}
+    lr = detection.get("logreg") or {}
+    xgb_auc = xgb.get("auc")
+    lr_auc = lr.get("auc")
+    headline_auc = max((a for a in (xgb_auc, lr_auc) if a is not None), default=None)
+
+    if headline_auc is None:
+        status = "warn"
+    elif headline_auc < 0.6:
+        status = "pass"
+    elif headline_auc < 0.85:
+        status = "warn"
+    else:
+        status = "fail"
+
+    rows = []
+    if xgb:
+        rows.append(
+            f'<tr><td>XGBoost</td>'
+            f'<td class="num">{xgb.get("auc", float("nan")):.3f}</td>'
+            f'<td class="num">{xgb.get("ece", float("nan")):.3f}</td></tr>'
+        )
+    if lr:
+        rows.append(
+            f'<tr><td>Logistic Regression</td>'
+            f'<td class="num">{lr.get("auc", float("nan")):.3f}</td>'
+            f'<td class="num">{lr.get("ece", float("nan")):.3f}</td></tr>'
+        )
+    table = (
+        '<table class="data-table" style="margin-top:12px;"><thead><tr>'
+        '<th>Discriminator</th><th>ROC-AUC</th><th>ECE</th>'
+        '</tr></thead><tbody>' + "".join(rows) + '</tbody></table>'
+    ) if rows else '<p class="muted">No discriminator results.</p>'
+
+    n_real = detection.get("n_real", 0)
+    n_synth = detection.get("n_synth", 0)
+    n_features = detection.get("n_features", 0)
+    agreement = detection.get("agreement", "")
+    verdict = detection.get("verdict", "")
+    disclosure = (
+        f'<div class="muted" style="margin-top:10px; font-size:11px;">'
+        f'Trained on {n_real} real + {n_synth} synthetic rows over {n_features} features · '
+        f'{escape(agreement)}'
+        f'</div>'
+    )
+
+    return (
+        f'<div>'
+        f'<span class="pill pill-{status}">{escape(verdict)}</span>'
+        f'</div>'
+        f'{table}'
+        f'{disclosure}'
+    )
+
+
+def _render_privacy_section(privacy: dict | None) -> str:
+    """DCR / NNDR / baseline protection / membership inference. MIA AUC near 0.5 = no leakage."""
+    if privacy is None or not privacy.get("available"):
+        return '<p class="muted">Privacy pillar unavailable. Requires a real source dataset.</p>'
+
+    dcr = privacy.get("dcr") or {}
+    nndr = privacy.get("nndr") or {}
+    baseline = privacy.get("baseline_protection") or {}
+    mia = privacy.get("membership_inference") or {}
+    verdict = privacy.get("verdict", "")
+
+    mia_auc = mia.get("roc_auc") if mia and mia.get("available") else None
+    near_dup_pct = dcr.get("near_duplicate_pct", 0.0)
+    baseline_score = baseline.get("score", 0.0)
+    n_exact = dcr.get("n_exact_matches", 0)
+
+    if n_exact > 0 or (mia_auc is not None and mia_auc >= 0.7):
+        status = "fail"
+    elif (mia_auc is not None and mia_auc >= 0.6) or near_dup_pct >= 5.0 or baseline_score < 0.3:
+        status = "warn"
+    else:
+        status = "pass"
+
+    summary_rows = [
+        f'<tr><td>DCR (median)</td><td class="num">{dcr.get("median", float("nan")):.3f}</td>'
+        f'<td class="muted">distance synth→nearest real (Gower, [0,1])</td></tr>',
+        f'<tr><td>NNDR (median)</td><td class="num">{nndr.get("median", float("nan")):.3f}</td>'
+        f'<td class="muted">ratio nearest/2nd-nearest; high → row "knows" a specific real record</td></tr>',
+        f'<tr><td>Baseline protection</td><td class="num">{baseline_score:.3f}</td>'
+        f'<td class="muted">DCR vs random reference; 1.0 → synth as far from real as random</td></tr>',
+        f'<tr><td>Exact matches</td><td class="num">{n_exact}</td>'
+        f'<td class="muted">synthetic rows identical to a real row</td></tr>',
+        f'<tr><td>Near-duplicates</td><td class="num">{near_dup_pct:.2f}%</td>'
+        f'<td class="muted">synth rows within DCR &lt; 0.01 of a real row</td></tr>',
+    ]
+
+    if mia and mia.get("available"):
+        interp = mia.get("interpretation", "")
+        summary_rows.append(
+            f'<tr><td>MIA ROC-AUC</td><td class="num">{mia_auc:.3f}</td>'
+            f'<td class="muted">{escape(interp)} (0.5 = attacker at random)</td></tr>'
+        )
+        summary_rows.append(
+            f'<tr><td>MIA TPR @ 1% FPR</td><td class="num">{mia.get("tpr_at_1pct_fpr", float("nan")):.3f}</td>'
+            f'<td class="muted">strict-threshold attack success rate</td></tr>'
+        )
+
+    table = (
+        '<table class="data-table" style="margin-top:12px;"><thead><tr>'
+        '<th>Metric</th><th>Value</th><th>Meaning</th>'
+        '</tr></thead><tbody>' + "".join(summary_rows) + '</tbody></table>'
+    )
+
+    n_real = privacy.get("n_real", 0)
+    n_synth = privacy.get("n_synth", 0)
+    disclosure = (
+        f'<div class="muted" style="margin-top:10px; font-size:11px;">'
+        f'Computed over {n_real} real and {n_synth} synthetic rows. '
+        f'Gower mixed-type distance normalized to [0,1] using real-data ranges.'
+        f'</div>'
+    )
+
+    return (
+        f'<div>'
+        f'<span class="pill pill-{status}">{escape(verdict)}</span>'
+        f'</div>'
+        f'{table}'
+        f'{disclosure}'
+    )
+
+
 def _render_diagnostics_section(diagnostics: dict | None) -> str:
     """Experiment diagnostics: confusion matrices + observations + recommendations."""
     if diagnostics is None or not diagnostics.get("available"):
@@ -762,7 +922,7 @@ def render_html_report(session: dict) -> str:
     """Render a self-contained, printable HTML report for one generated dataset."""
     validation = session.get("validation", {}) or {}
     source_stats = session.get("source_stats", {}) or {}
-    suitability = classify_suitability(validation, source_stats)
+    suitability = classify_suitability(validation, source_stats, session.get("privacy"))
     risks = derive_risks(validation, source_stats)
     next_steps = derive_next_steps(validation, source_stats)
 
@@ -780,12 +940,16 @@ def render_html_report(session: dict) -> str:
     rule_pack = session.get("rule_pack")
     audit = session.get("audit")
     diagnostics = session.get("diagnostics")
+    detection = session.get("detection")
+    privacy = session.get("privacy")
     discovered_suggestions = session.get("discovered_suggestions")
 
     utility_section = _render_utility_section(utility)
     rule_pack_section = _render_rule_pack_section(rule_pack)
     audit_section = _render_audit_section(audit)
     diagnostics_section = _render_diagnostics_section(diagnostics)
+    detection_section = _render_detection_section(detection)
+    privacy_section = _render_privacy_section(privacy)
     discovery_section = _render_discovery_section(discovered_suggestions, edge_cases_requested)
 
     # Metrics cards
@@ -1285,6 +1449,16 @@ def render_html_report(session: dict) -> str:
   <section>
     <h2>Semantic Audit</h2>
     {audit_section}
+  </section>
+
+  <section>
+    <h2>Real-vs-Synthetic Detection</h2>
+    {detection_section}
+  </section>
+
+  <section>
+    <h2>Privacy &amp; Disclosure Risk</h2>
+    {privacy_section}
   </section>
 
   <section>
