@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=tabdiff-fraud-oracle-sweep
-#SBATCH --partition=rbaltman
+#SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=24G
