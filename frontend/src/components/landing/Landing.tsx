@@ -27,8 +27,9 @@ interface LandingProps {
 
 const OUTPUT_CHIPS = [
   '↓ CSV · JSONL · Parquet',
-  'Validation report',
-  'k-Anonymity checked',
+  'Trust Report · PDF',
+  'k-Anonymity · MIA-tested',
+  'Augmentation, not replacement',
 ];
 
 const MOCK_ROWS = [
@@ -63,13 +64,13 @@ function buildSteps(fileNames: string[]) {
     },
     {
       num: '02',
-      title: 'Sample synthesis',
+      title: 'Grounded synthesis',
       desc: 'Generates loss-ratio-faithful rows with Poisson frequency, lognormal severity, and preserved peril–geo correlations.',
     },
     {
       num: '03',
-      title: 'Fidelity validation',
-      desc: 'Cross-validates synthesized distributions against source bordereaux and issues an actuarial fidelity report before delivery.',
+      title: 'Trust-grade validation',
+      desc: 'Validates fidelity, downstream model utility, privacy (DCR / MIA), and indistinguishability — and ships a stakeholder-ready Trust Report.',
     },
   ];
 }

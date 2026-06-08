@@ -53,7 +53,7 @@ export default function PromptBox({
         onChange={(e) => setPrompt(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="e.g. 10k auto fraud claims with realistic patterns — amplify the rare cases so models can learn..."
-        aria-label="Describe the insurance dataset you want to synthesize"
+        aria-label="Describe the insurance dataset you need to augment with validated synthetic rows"
       />
       <div className="prompt-box-footer">
         <div className="prompt-meta">
