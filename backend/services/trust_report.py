@@ -43,6 +43,10 @@ def _edge_case_buckets(validation: dict) -> tuple[list[dict], list[dict], list[d
     return met, unmet, unparsed
 
 
+def _privacy_validation(validation: dict) -> dict:
+    return validation.get("privacyValidation") or {}
+
+
 def classify_suitability(validation: dict, source_stats: dict | None = None) -> dict[str, Any]:
     """Tier the dataset and produce stakeholder-readable fit / not-fit lists."""
     realism = _metric_score(validation, "realism")
@@ -52,8 +56,11 @@ def classify_suitability(validation: dict, source_stats: dict | None = None) -> 
     critical_drift = bool(_failing_columns(validation))
     _, unmet, _ = _edge_case_buckets(validation)
     pii_flagged = safety < 90
+    privacy = _privacy_validation(validation)
+    exact_match_fail = (privacy.get("exactMatch") or {}).get("status") == "fail"
+    nearest_neighbor_fail = (privacy.get("nearestNeighbor") or {}).get("status") == "fail"
 
-    if pii_flagged or realism < 70 or critical_drift:
+    if pii_flagged or realism < 70 or critical_drift or exact_match_fail or nearest_neighbor_fail:
         tier = "review_required"
     elif realism >= 90 and safety >= 90 and not unmet:
         tier = "high_confidence"
@@ -127,6 +134,12 @@ def classify_suitability(validation: dict, source_stats: dict | None = None) -> 
         rationale_parts.append(f"{len(_failing_columns(validation))} column(s) failing fidelity")
     if unmet:
         rationale_parts.append(f"{len(unmet)} edge case(s) below target")
+    if exact_match_fail:
+        n = (privacy.get("exactMatch") or {}).get("matchCount", 0)
+        rationale_parts.append(f"{n} exact source-row match(es)")
+    if nearest_neighbor_fail:
+        pct = (privacy.get("nearestNeighbor") or {}).get("rowsBelowThresholdPct", 0)
+        rationale_parts.append(f"{pct}% nearest-neighbor privacy risk")
 
     return {
         "tier": tier,
@@ -178,6 +191,28 @@ def derive_risks(validation: dict, source_stats: dict | None = None) -> list[dic
             "severity": sev,
             "title": f"Low diversity in '{issue['column']}'",
             "detail": issue.get("detail", "Column shows insufficient variation."),
+        })
+
+    privacy = _privacy_validation(validation)
+    exact_match = privacy.get("exactMatch") or {}
+    if exact_match.get("status") == "fail":
+        risks.append({
+            "severity": "critical",
+            "title": f"{exact_match.get('matchCount', 0):,} exact source-row match(es)",
+            "detail": "At least one synthetic row exactly matches a source row after normalized "
+                      "comparison across shared non-ID columns. Treat this as a privacy blocker "
+                      "before sharing or using the dataset downstream.",
+        })
+
+    nearest = privacy.get("nearestNeighbor") or {}
+    if nearest.get("status") in ("warn", "fail") and nearest.get("minDistance") is not None:
+        risks.append({
+            "severity": "critical" if nearest.get("status") == "fail" else "warn",
+            "title": (
+                f"{nearest.get('rowsBelowThreshold', 0):,} row(s) very close to source records"
+            ),
+            "detail": "Nearest-neighbor privacy found synthetic rows below the configured distance "
+                      f"threshold ({nearest.get('threshold')}). Review these rows for memorization risk.",
         })
 
     if not has_source:
@@ -242,6 +277,21 @@ def derive_next_steps(validation: dict, source_stats: dict | None = None) -> lis
         steps.append(
             "Investigate low-cardinality columns and consider increasing source variance or "
             "row count to reduce duplicate generation."
+        )
+
+    privacy = _privacy_validation(validation)
+    exact_match = privacy.get("exactMatch") or {}
+    if exact_match.get("status") == "fail":
+        steps.append(
+            "Remove exact source-row copies before sharing the dataset, then regenerate or refit "
+            "and rerun privacy validation."
+        )
+
+    nearest = privacy.get("nearestNeighbor") or {}
+    if nearest.get("status") in ("warn", "fail") and nearest.get("minDistance") is not None:
+        steps.append(
+            "Review nearest-neighbor privacy results and adjust generation settings if synthetic "
+            "rows remain very close to source records."
         )
 
     constant_cols = [i["column"] for i in validation.get("diversityIssues", []) if i.get("status") == "fail"]
