@@ -10,4 +10,4 @@
 
 Joel Sinchi · Marc Bernardino · Shani Su · Lea Hadzic · Mihajlo Stojkovic
 
-Stanford CS 194W, Spring 2026
+Stanford CS 194, Spring 2026
