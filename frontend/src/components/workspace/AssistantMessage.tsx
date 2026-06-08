@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import Logo from '../Logo';
 import AgentTaskList from './AgentTaskList';
 import AgentTrace from './AgentTrace';
@@ -66,6 +66,15 @@ export default function AssistantMessage({
   const [discoveredSuggestions, setDiscoveredSuggestions] = useState<EdgeCaseSuggestion[]>([]);
 
   const hasClarifying = (clarifyingQuestions?.length ?? 0) > 0 && !clarifyDismissed;
+
+  type StepState = 'upcoming' | 'active' | 'done';
+  const hasSchema = schema != null && schema.length > 0;
+  const showStepper = (loading || plan !== undefined || hasSchema) && !planText;
+  const stepperSteps: { label: string; state: StepState }[] = [
+    { label: 'Schema',    state: hasSchema ? 'done' : 'active' },
+    { label: 'Configure', state: !hasSchema ? 'upcoming' : approval === 'idle' ? 'active' : 'done' },
+    { label: 'Generate',  state: approval === 'idle' ? 'upcoming' : approval === 'complete' ? 'done' : 'active' },
+  ];
 
   // Sync the legacy 3-step agent panel with real user-driven actions:
   //   a1 (Schema)        — already "done" when message renders (set by App.tsx)
@@ -152,6 +161,24 @@ export default function AssistantMessage({
         <Logo />
       </div>
       <div className="ws-msg-body">
+        {showStepper && (
+          <div className="ws-stepper" aria-label="Workflow progress">
+            {stepperSteps.map((step, i) => (
+              <Fragment key={step.label}>
+                <div className={`ws-stepper-step ws-stepper-step-${step.state}`}>
+                  <span className="ws-stepper-dot" aria-hidden="true" />
+                  <span className="ws-stepper-label">{step.label}</span>
+                </div>
+                {i < stepperSteps.length - 1 && (
+                  <div
+                    className={`ws-stepper-connector${step.state === 'done' ? ' ws-stepper-connector-done' : ''}`}
+                    aria-hidden="true"
+                  />
+                )}
+              </Fragment>
+            ))}
+          </div>
+        )}
         {loading ? (
           <div className="ws-typing" aria-label="Thinking">
             <span className="ws-typing-dot" />

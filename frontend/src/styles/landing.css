@@ -186,6 +186,28 @@
   gap: 12px;
 }
 
+/* Output artifact chips */
+.landing-output-chips {
+  width: 100%;
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.landing-output-chip {
+  font-size: 11px;
+  font-family: var(--mono);
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid rgba(122, 154, 109, 0.28);
+  border-radius: 5px;
+  padding: 3px 9px;
+  pointer-events: none;
+  user-select: none;
+}
+
 /* Sample prompts */
 .landing-samples {
   width: 100%;

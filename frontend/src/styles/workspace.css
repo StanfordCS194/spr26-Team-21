@@ -419,6 +419,69 @@
   color: var(--text-muted);
 }
 
+/* Workflow stepper */
+.ws-stepper {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.ws-stepper-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ws-stepper-connector {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+  margin: 0 10px;
+  min-width: 24px;
+}
+
+.ws-stepper-connector-done {
+  background: var(--accent);
+  opacity: 0.35;
+}
+
+.ws-stepper-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.ws-stepper-step-done .ws-stepper-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.ws-stepper-step-active .ws-stepper-dot {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.ws-stepper-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.ws-stepper-step-done .ws-stepper-label {
+  color: var(--text-muted);
+}
+
+.ws-stepper-step-active .ws-stepper-label {
+  color: var(--accent);
+  font-weight: 500;
+}
+
 /* Execution plan steps */
 .ws-plan-steps {
   display: flex;

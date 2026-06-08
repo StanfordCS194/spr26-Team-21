@@ -25,6 +25,12 @@ interface LandingProps {
   setFormat: (f: 'csv' | 'jsonl' | 'parquet') => void;
 }
 
+const OUTPUT_CHIPS = [
+  '↓ CSV · JSONL · Parquet',
+  'Validation report',
+  'k-Anonymity checked',
+];
+
 const MOCK_ROWS = [
   { claim_id: 'CLM-00192', date: '2024-03-12', peril: 'Collision',  loss_amount: 8420,  at_fault: true,  fraud_flag: false },
   { claim_id: 'CLM-00193', date: '2024-03-14', peril: 'Theft',      loss_amount: 22100, at_fault: false, fraud_flag: true  },
@@ -107,6 +113,12 @@ export default function Landing(props: LandingProps) {
       {schemaError && (
         <p className="landing-schema-error" role="alert">{schemaError}</p>
       )}
+
+      <div className="landing-output-chips" aria-label="Output artifacts">
+        {OUTPUT_CHIPS.map((chip) => (
+          <span key={chip} className="landing-output-chip">{chip}</span>
+        ))}
+      </div>
 
       <div className="landing-samples" role="list" aria-label="Sample prompts">
         {SAMPLE_PROMPTS.map((text) => (
