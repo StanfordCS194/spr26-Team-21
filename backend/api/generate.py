@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 
 from core.state import sdv_models, sessions, source_datasets
 from models.schemas import DiscoverEdgeCasesRequest, GenerateRequest
+from services.detection import compute_detection
 from services.diagnostics import compute_diagnostics
 from services.edge_case_discovery import discover_edge_cases
 from services.edge_cases import apply_edge_cases, parse_edge_cases
@@ -101,6 +102,10 @@ async def generate(req: GenerateRequest):
     # Experiment diagnostics: confusion matrices + observations + recommendations on top of utility.
     diagnostics = compute_diagnostics(real_df, synth_df, utility=utility, label_col=req.label_col)
 
+    # Indistinguishability detection (5th eval pillar). Trains XGBoost + LogReg
+    # discriminators to predict real-vs-synth; AUC ≈ 0.5 = indistinguishable.
+    detection = compute_detection(real_df, synth_df)
+
     # Semantic auditor (heuristic stub; LLM hook in services/llm_auditor.py).
     audit = audit_sample(synth_df, rule_pack_report=rule_report, use_llm=False)
 
@@ -125,6 +130,7 @@ async def generate(req: GenerateRequest):
         "validation": validation,
         "utility": utility,
         "diagnostics": diagnostics,
+        "detection": detection,
         "rule_pack": rule_report,
         "audit": audit,
         "privacy": privacy,
@@ -143,6 +149,7 @@ async def generate(req: GenerateRequest):
         "validation": validation,
         "utility": utility,
         "diagnostics": diagnostics,
+        "detection": detection,
         "rule_pack": rule_report,
         "audit": audit,
         "privacy": privacy,
@@ -205,6 +212,7 @@ async def manifest(session_id: str):
         "validation": entry.get("validation", {}),
         "utility": entry.get("utility"),
         "diagnostics": entry.get("diagnostics"),
+        "detection": entry.get("detection"),
         "rule_pack": entry.get("rule_pack"),
         "audit": entry.get("audit"),
         "privacy": entry.get("privacy"),
