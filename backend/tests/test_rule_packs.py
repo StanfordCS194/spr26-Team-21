@@ -62,3 +62,19 @@ def test_apply_pack_full_pipeline_round_trips(insurance_df):
 def test_apply_pack_returns_none_for_unknown_schema():
     df = pd.DataFrame([{"foo": 1, "bar": "x"}])
     assert apply_pack(df) is None
+
+
+def test_apply_pack_handles_string_typed_numeric_columns(insurance_df):
+    """Synthetic frames can carry numbers as text; the numeric rules must not 500."""
+    numeric_cols = [
+        "injury_claim", "property_claim", "vehicle_claim", "total_claim_amount",
+        "age", "bodily_injuries", "number_of_vehicles_involved",
+    ]
+    stringy = insurance_df.copy()
+    for col in numeric_cols:
+        stringy[col] = stringy[col].astype(str)
+
+    report = apply_pack(stringy)  # would previously raise "'<' not supported … str and int"
+    assert report is not None
+    # The pipeline coerces numeric-like columns, so the output is numeric again.
+    assert pd.api.types.is_numeric_dtype(report["repaired_df"]["injury_claim"])

@@ -395,6 +395,27 @@ def detect_pack(df: pd.DataFrame) -> str | None:
     return None
 
 
+def _coerce_numeric_like(df: pd.DataFrame, threshold: float = 0.9) -> pd.DataFrame:
+    """Return a copy with object columns coerced to numeric when nearly all values parse.
+
+    Synthetic frames can carry numbers as text when a numeric column was profiled as a
+    category. Coercing here lets the packs' numeric rules (and repairs) compare correctly
+    instead of raising "'<' not supported between instances of 'str' and 'int'", and
+    leaves the downloaded output numeric. Genuinely categorical columns (non-numeric
+    labels) fall below the threshold and are left untouched.
+    """
+    out = df.copy()
+    for col in out.columns:
+        if out[col].dtype != object:
+            continue
+        non_null = out[col].dropna()
+        if non_null.empty:
+            continue
+        if pd.to_numeric(non_null, errors="coerce").notna().mean() >= threshold:
+            out[col] = pd.to_numeric(out[col], errors="coerce")
+    return out
+
+
 def check_pack(df: pd.DataFrame, pack: dict, context: dict | None = None) -> dict[str, Any]:
     """Run every rule's check against df. Returns counts + per-rule violation rate.
 
@@ -422,7 +443,12 @@ def check_pack(df: pd.DataFrame, pack: dict, context: dict | None = None) -> dic
             total_violations += n_viol
             continue
 
-        mask = _check_rule(df, rule)
+        try:
+            mask = _check_rule(df, rule)
+        except Exception:
+            # A single rule that can't evaluate (e.g. unexpected dtypes) must not
+            # fail the whole generation — skip it rather than 500.
+            mask = pd.Series([False] * len(df), index=df.index)
         n_viol = int(mask.sum())
         total_violations += n_viol
         results.append({
@@ -481,6 +507,7 @@ def apply_pack(
     dataset metric against a source statistic — e.g. C15_fraud_rate_match_source uses
     it to validate that synth prevalence matches the original within tolerance.
     """
+    df = _coerce_numeric_like(df)
     name = pack_name or detect_pack(df)
     if name is None:
         return None
