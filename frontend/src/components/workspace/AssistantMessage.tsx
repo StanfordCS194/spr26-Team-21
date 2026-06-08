@@ -7,6 +7,8 @@ import SchemaCard from './SchemaCard';
 import SchemaInferenceProgress from './SchemaInferenceProgress';
 import ValidationReport from './ValidationReport';
 import DiagnosticsPanel from './DiagnosticsPanel';
+import PrivacyPanel from './PrivacyPanel';
+import DetectionPanel from './DetectionPanel';
 import EdgeCaseSuggestions from './EdgeCaseSuggestions';
 import ClarifyingQuestions from './ClarifyingQuestions';
 import PreviewTable from './PreviewTable';
@@ -357,6 +359,8 @@ export default function AssistantMessage({
                       </div>
                       <ValidationReport report={report} />
                       <DiagnosticsPanel diagnostics={genResult?.diagnostics} />
+                      <PrivacyPanel privacy={genResult?.privacy} />
+                      <DetectionPanel detection={genResult?.detection} />
                     </>
                   )}
                 </div>
