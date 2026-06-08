@@ -1,4 +1,8 @@
-import { getLogoSrc, type IntegrationWithOrder } from '../../constants/integrations';
+import {
+  getLogoSrc,
+  type IntegrationConfig,
+  type IntegrationWithOrder,
+} from '../../constants/integrations';
 
 interface IntegrationCardProps {
   integration: IntegrationWithOrder;
@@ -6,10 +10,23 @@ interface IntegrationCardProps {
   onToggle: (slug: string) => void;
 }
 
+function configDetail(config?: IntegrationConfig): { detail: string; title: string } | null {
+  if (config?.kind === 'mongo') {
+    const m = config.mongo;
+    return { detail: `${m.db}.${m.collection}`, title: `${m.host} · ${m.db}.${m.collection}` };
+  }
+  if (config?.kind === 's3') {
+    const s = config.s3;
+    const target = s.key === '__auto__' ? `${s.prefix ?? ''}* (auto)` : s.key;
+    return { detail: `${s.bucket}/${target}`, title: `${s.bucket}/${target}` };
+  }
+  return null;
+}
+
 export default function IntegrationCard({ integration, onConnect, onToggle }: IntegrationCardProps) {
   const { slug, name, enabled, config } = integration;
-  const mongo = config?.kind === 'mongo' ? config.mongo : null;
-  const hasConfig = Boolean(mongo);
+  const detail = configDetail(config);
+  const hasConfig = Boolean(detail);
 
   return (
     <div className={`integration-card ${enabled ? 'enabled' : ''} ${hasConfig ? 'has-config' : ''}`}>
@@ -20,9 +37,9 @@ export default function IntegrationCard({ integration, onConnect, onToggle }: In
         loading="lazy"
       />
       <span className="integration-name">{name}</span>
-      {mongo && (
-        <span className="integration-config-detail" title={`${mongo.host} · ${mongo.db}.${mongo.collection}`}>
-          {mongo.db}.{mongo.collection}
+      {detail && (
+        <span className="integration-config-detail" title={detail.title}>
+          {detail.detail}
         </span>
       )}
       {enabled ? (

@@ -5,10 +5,12 @@ import type {
   IntegrationWithOrder,
   MongoConfig,
   Profile,
+  S3Config,
 } from '../../constants/integrations';
 import { Close, Search } from '../icons/Icons';
 import IntegrationGrid from './IntegrationGrid';
 import MongoConnectModal from './MongoConnectModal';
+import S3ConnectModal from './S3ConnectModal';
 
 interface ProfileModalProps {
   mode: 'view' | 'add';
@@ -33,6 +35,7 @@ export default function ProfileModal({ mode, profile, onClose, onSave, onUpdate 
   );
   const [orderCounter, setOrderCounter] = useState(nextOrder);
   const [mongoModalOpen, setMongoModalOpen] = useState(false);
+  const [s3ModalOpen, setS3ModalOpen] = useState(false);
 
   const stripOrder = (items: IntegrationWithOrder[]): Integration[] =>
     items.map(({ connectedOrder: _, ...rest }) => rest);
@@ -40,6 +43,10 @@ export default function ProfileModal({ mode, profile, onClose, onSave, onUpdate 
   const connectIntegration = useCallback((slug: string) => {
     if (slug === 'mongodb') {
       setMongoModalOpen(true);
+      return;
+    }
+    if (slug === 'amazons3') {
+      setS3ModalOpen(true);
       return;
     }
     setIntegrations((prev) => {
@@ -69,6 +76,25 @@ export default function ProfileModal({ mode, profile, onClose, onSave, onUpdate 
     });
     setOrderCounter((c) => c + 1);
     setMongoModalOpen(false);
+  }, [orderCounter, onUpdate]);
+
+  const handleS3Connected = useCallback((config: S3Config) => {
+    setIntegrations((prev) => {
+      const next = prev.map((i) =>
+        i.slug === 'amazons3'
+          ? {
+              ...i,
+              enabled: true,
+              connectedOrder: orderCounter,
+              config: { kind: 's3' as const, s3: config },
+            }
+          : i,
+      );
+      onUpdate?.(stripOrder(next));
+      return next;
+    });
+    setOrderCounter((c) => c + 1);
+    setS3ModalOpen(false);
   }, [orderCounter, onUpdate]);
 
   const toggleIntegration = useCallback((slug: string) => {
@@ -189,13 +215,22 @@ export default function ProfileModal({ mode, profile, onClose, onSave, onUpdate 
       </div>
       {mongoModalOpen && (
         <MongoConnectModal
-          initialConfig={
-            integrations.find((i) => i.slug === 'mongodb')?.config?.kind === 'mongo'
-              ? integrations.find((i) => i.slug === 'mongodb')!.config!.mongo
-              : undefined
-          }
+          initialConfig={(() => {
+            const cfg = integrations.find((i) => i.slug === 'mongodb')?.config;
+            return cfg?.kind === 'mongo' ? cfg.mongo : undefined;
+          })()}
           onClose={() => setMongoModalOpen(false)}
           onConnect={handleMongoConnected}
+        />
+      )}
+      {s3ModalOpen && (
+        <S3ConnectModal
+          initialConfig={(() => {
+            const cfg = integrations.find((i) => i.slug === 'amazons3')?.config;
+            return cfg?.kind === 's3' ? cfg.s3 : undefined;
+          })()}
+          onClose={() => setS3ModalOpen(false)}
+          onConnect={handleS3Connected}
         />
       )}
     </div>,

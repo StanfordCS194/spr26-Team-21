@@ -16,7 +16,21 @@ export interface MongoConfig {
   rowCount?: number;
 }
 
-export type IntegrationConfig = { kind: 'mongo'; mongo: MongoConfig };
+export interface S3Config {
+  accessKeyId: string;
+  secretAccessKey: string;
+  sessionToken?: string;
+  region?: string;
+  bucket: string;
+  prefix?: string;
+  key: string;
+  host: string;
+  rowCount?: number;
+}
+
+export type IntegrationConfig =
+  | { kind: 'mongo'; mongo: MongoConfig }
+  | { kind: 's3'; s3: S3Config };
 
 export interface Integration {
   name: string;

@@ -332,18 +332,10 @@ export type AgentEvent =
       })
   | { type: 'error'; message: string };
 
-export async function mongoAutoInferStream(
-  uri: string,
-  db: string,
-  collection: string | null,
-  prompt: string,
+async function pumpAgentStream(
+  res: Response,
   onEvent: (event: AgentEvent) => void,
 ): Promise<void> {
-  const res = await fetch(`${BASE}/sources/mongo/auto-infer`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ uri, db, collection, prompt }),
-  });
   if (!res.body) throw new Error('No response body from auto-infer');
 
   const reader = res.body.getReader();
@@ -369,4 +361,95 @@ export async function mongoAutoInferStream(
       }
     }
   }
+}
+
+export async function mongoAutoInferStream(
+  uri: string,
+  db: string,
+  collection: string | null,
+  prompt: string,
+  onEvent: (event: AgentEvent) => void,
+): Promise<void> {
+  const res = await fetch(`${BASE}/sources/mongo/auto-infer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uri, db, collection, prompt }),
+  });
+  await pumpAgentStream(res, onEvent);
+}
+
+// ── Amazon S3 source ─────────────────────────────────────────────────────
+
+export interface S3Creds {
+  access_key_id: string;
+  secret_access_key: string;
+  session_token?: string;
+  region?: string;
+}
+
+export interface S3TestResponse {
+  ok: boolean;
+  buckets?: Array<{ name: string }>;
+  error?: string;
+}
+
+export interface S3ObjectsResponse {
+  ok: boolean;
+  host?: string;
+  objects?: Array<{ key: string; size: number | null }>;
+  error?: string;
+}
+
+export async function s3Test(creds: S3Creds): Promise<S3TestResponse> {
+  const res = await fetch(`${BASE}/sources/s3/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ creds }),
+  });
+  if (!res.ok) throw new Error(`S3 test failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function s3ListObjects(
+  creds: S3Creds,
+  bucket: string,
+  prefix = '',
+): Promise<S3ObjectsResponse> {
+  const res = await fetch(`${BASE}/sources/s3/objects`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ creds, bucket, prefix }),
+  });
+  if (!res.ok) throw new Error(`S3 list objects failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function s3InferSchema(
+  creds: S3Creds,
+  bucket: string,
+  key: string,
+): Promise<MongoInferResponse> {
+  const res = await fetch(`${BASE}/sources/s3/infer-schema`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ creds, bucket, key }),
+  });
+  if (!res.ok) throw new Error(`S3 schema inference failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function s3AutoInferStream(
+  creds: S3Creds,
+  bucket: string,
+  prefix: string | null,
+  key: string | null,
+  prompt: string,
+  onEvent: (event: AgentEvent) => void,
+): Promise<void> {
+  const res = await fetch(`${BASE}/sources/s3/auto-infer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ creds, bucket, prefix, key, prompt }),
+  });
+  await pumpAgentStream(res, onEvent);
 }

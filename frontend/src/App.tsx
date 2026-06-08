@@ -27,7 +27,10 @@ import {
   mongoAutoInferStream,
   mongoInferSchema,
   planFromPrompt,
+  s3AutoInferStream,
+  s3InferSchema,
   type AgentEvent,
+  type S3Creds,
   type SchemaColumn,
   type SourceStats,
 } from './api/client';
@@ -153,8 +156,26 @@ function App() {
     const mongoConfig =
       mongoIntegration?.config?.kind === 'mongo' ? mongoIntegration.config.mongo : null;
 
-    // ── Sourcing agent path (Mongo + auto-select) ──────────────────────
-    if (mongoConfig && mongoConfig.collection === '__auto__' && groundingFiles.length === 0) {
+    // S3 is a secondary grounding source; MongoDB takes precedence if both are connected.
+    const s3Integration = activeProfile.integrations.find(
+      (i) => i.slug === 'amazons3' && i.enabled && i.config?.kind === 's3',
+    );
+    const s3Config =
+      !mongoConfig && s3Integration?.config?.kind === 's3' ? s3Integration.config.s3 : null;
+    const s3Creds: S3Creds | null = s3Config
+      ? {
+          access_key_id: s3Config.accessKeyId,
+          secret_access_key: s3Config.secretAccessKey,
+          session_token: s3Config.sessionToken,
+          region: s3Config.region,
+        }
+      : null;
+
+    const mongoAuto = mongoConfig?.collection === '__auto__';
+    const s3Auto = s3Config?.key === '__auto__';
+
+    // ── Sourcing agent path (auto-select, Mongo or S3) ─────────────────
+    if ((mongoAuto || s3Auto) && groundingFiles.length === 0) {
       const turns: AgentTurn[] = [];
       let strategy: GroundingStrategyData | null = null;
       let agentSchema: SchemaColumn[] | null = null;
@@ -167,12 +188,7 @@ function App() {
       patch({ loading: false, plan: planData, agentTurns: [], schemaInference: schemaState });
 
       try {
-        await mongoAutoInferStream(
-          mongoConfig.uri,
-          mongoConfig.db,
-          null,
-          trimmed,
-          (event: AgentEvent) => {
+        const handleAgentEvent = (event: AgentEvent) => {
             if (event.type === 'step_start') {
               turns.push({
                 turn: event.turn,
@@ -256,13 +272,26 @@ function App() {
               }
               patch({ agentTurns: [...turns] });
             }
-          },
-        );
+        };
+
+        if (mongoAuto && mongoConfig) {
+          await mongoAutoInferStream(mongoConfig.uri, mongoConfig.db, null, trimmed, handleAgentEvent);
+        } else if (s3Config && s3Creds) {
+          await s3AutoInferStream(
+            s3Creds,
+            s3Config.bucket,
+            s3Config.prefix ?? null,
+            null,
+            trimmed,
+            handleAgentEvent,
+          );
+        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Unknown error';
+        const sourceLabel = mongoAuto ? 'MongoDB' : 'Amazon S3';
         patch({
           loading: false,
-          planText: `Connection to MongoDB failed: ${msg}. Check your credentials in the profile settings and try again.`,
+          planText: `Connection to ${sourceLabel} failed: ${msg}. Check your credentials in the profile settings and try again.`,
         });
         return;
       }
@@ -347,6 +376,32 @@ function App() {
           planText: result?.error
             ? `MongoDB connection failed: ${result.error}`
             : 'Could not connect to MongoDB — check your URI and database name in the profile settings.',
+        });
+        return;
+      }
+    } else if (s3Config && s3Creds) {
+      // S3 is the active grounding source — pull the object through the backend
+      const result = await s3InferSchema(s3Creds, s3Config.bucket, s3Config.key).catch(() => null);
+
+      if (result && !result.error) {
+        schema = result.columns;
+        stats = result.stats;
+        modelId = result.model_id ?? null;
+        sourceId = result.source_id ?? null;
+        schemaSource = 'upload';
+        generationSpec = {
+          row_count: 10_000,
+          format: 'csv',
+          labels: [],
+          edge_cases: [],
+          constraints: [],
+        };
+      } else {
+        patch({
+          loading: false,
+          planText: result?.error
+            ? `S3 connection failed: ${result.error}`
+            : 'Could not read the S3 object — check your bucket and key in the profile settings.',
         });
         return;
       }
