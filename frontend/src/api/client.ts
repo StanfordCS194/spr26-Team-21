@@ -111,6 +111,68 @@ export interface DiagnosticsReport {
   recommendations?: string[];
 }
 
+// ── Privacy ──────────────────────────────────────────────────────────────
+
+export interface PrivacyDCR {
+  median: number;
+  p5: number;
+  min: number;
+  n_exact_matches: number;
+  n_near_duplicates: number;
+  near_duplicate_pct: number;
+}
+
+export interface PrivacyNNDR {
+  median: number;
+  p5: number;
+}
+
+export interface PrivacyBaseline {
+  score: number;
+  synth_dcr_median: number;
+  random_dcr_median: number;
+}
+
+export interface MembershipInference {
+  available: boolean;
+  roc_auc: number;
+  tpr_at_1pct_fpr: number;
+  n_members: number;
+  n_nonmembers: number;
+  interpretation: string;
+}
+
+export interface PrivacyReport {
+  available: boolean;
+  n_real?: number;
+  n_synth?: number;
+  n_features?: number;
+  dcr?: PrivacyDCR;
+  nndr?: PrivacyNNDR;
+  baseline_protection?: PrivacyBaseline;
+  membership_inference?: MembershipInference | null;
+  verdict?: string;
+}
+
+// ── Detection ────────────────────────────────────────────────────────────
+
+export interface DiscriminatorResult {
+  auc: number;
+  ece: number;
+  model: string;
+}
+
+export interface DetectionReport {
+  available: boolean;
+  n_real?: number;
+  n_synth?: number;
+  n_features?: number;
+  xgboost?: DiscriminatorResult | null;
+  logreg?: DiscriminatorResult | null;
+  agreement?: string;
+  verdict?: string;
+}
+
 export interface GenerateResponse {
   session_id: string;
   row_count: number;
@@ -119,6 +181,8 @@ export interface GenerateResponse {
   filename?: string;
   validation: ValidationReportData;
   diagnostics?: DiagnosticsReport | null;
+  privacy?: PrivacyReport | null;
+  detection?: DetectionReport | null;
 }
 
 export interface ClarifyingQuestion {
