@@ -2,8 +2,6 @@ const ICON_CDN_BASE = 'https://cdn.simpleicons.org';
 
 const LOCAL_LOGOS: Record<string, string> = {
   amazons3: '/icons/aws.svg',
-  slack: '/icons/slack.svg',
-  salesforce: '/icons/salesforce.svg',
 };
 
 export function getLogoSrc(slug: string): string {
@@ -43,23 +41,7 @@ export const INITIAL_PROFILES: Profile[] = [
     name: 'Default',
     integrations: [
       { name: 'Amazon S3', slug: 'amazons3', enabled: false },
-      { name: 'PostgreSQL', slug: 'postgresql', enabled: false },
-      { name: 'Snowflake', slug: 'snowflake', enabled: false },
-      { name: 'Google BigQuery', slug: 'googlebigquery', enabled: false },
       { name: 'MongoDB', slug: 'mongodb', enabled: false },
-      { name: 'Redis', slug: 'redis', enabled: false },
-      { name: 'Elasticsearch', slug: 'elasticsearch', enabled: false },
-      { name: 'Apache Kafka', slug: 'apachekafka', enabled: false },
-      { name: 'MySQL', slug: 'mysql', enabled: false },
-      { name: 'Slack', slug: 'slack', enabled: false },
-      { name: 'GitHub', slug: 'github', enabled: false },
-      { name: 'Jira', slug: 'jira', enabled: false },
-      { name: 'Confluence', slug: 'confluence', enabled: false },
-      { name: 'Notion', slug: 'notion', enabled: false },
-      { name: 'Databricks', slug: 'databricks', enabled: false },
-      { name: 'Google Drive', slug: 'googledrive', enabled: false },
-      { name: 'Stripe', slug: 'stripe', enabled: false },
-      { name: 'Salesforce', slug: 'salesforce', enabled: false },
     ],
   },
 ];

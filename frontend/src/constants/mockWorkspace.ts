@@ -297,7 +297,7 @@ export function buildAgents(sourceNames: string[]): AgentTask[] {
   ];
 }
 
-const DEMO_SOURCES = ['Amazon S3', 'PostgreSQL', 'MongoDB'];
+const DEMO_SOURCES = ['Amazon S3', 'MongoDB'];
 
 export const DEMO_MESSAGES: WorkspaceMessage[] = [
   {
