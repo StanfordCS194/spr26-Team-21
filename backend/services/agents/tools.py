@@ -5,29 +5,15 @@ import pandas as pd
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 
+from services.agents.filters import validate_filter
 from services.sources.mongo import CONNECT_TIMEOUT_MS, SYSTEM_DBS, safe_host
 
-ALLOWED_FILTER_OPERATORS = {"$eq", "$ne", "$gt", "$gte", "$lt", "$lte", "$in", "$nin", "$exists"}
 MAX_PER_QUERY_LIMIT = 10_000
 MAX_TOTAL_GROUNDING_ROWS = 50_000
 
 
 def _client(uri: str) -> MongoClient:
     return MongoClient(uri, serverSelectionTimeoutMS=CONNECT_TIMEOUT_MS)
-
-
-def validate_filter(filt: Any) -> tuple[bool, str | None]:
-    """Reject filter expressions that use anything outside the whitelist."""
-    if not isinstance(filt, dict):
-        return False, "filter must be an object"
-    for key, value in filt.items():
-        if key.startswith("$") and key not in ALLOWED_FILTER_OPERATORS:
-            return False, f"operator {key} is not allowed"
-        if isinstance(value, dict):
-            ok, err = validate_filter(value)
-            if not ok:
-                return False, err
-    return True, None
 
 
 # Tool schemas exposed to Claude — keep descriptions specific so the agent picks the right tool.
