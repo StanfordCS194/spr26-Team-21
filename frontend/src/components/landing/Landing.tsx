@@ -19,11 +19,20 @@ interface LandingProps {
   schemaInferring?: boolean;
   schemaError?: string | null;
   profileSummary?: { columns: number; sourceRows: number } | null;
+  rowCount: number;
+  setRowCount: (n: number) => void;
+  format: 'csv' | 'jsonl' | 'parquet';
+  setFormat: (f: 'csv' | 'jsonl' | 'parquet') => void;
 }
 
-const VALIDATION_LABELS = ['Realism', 'Diversity', 'Safety / PII'];
-
-const PLACEHOLDER_ROWS = [null, null, null] as const;
+const MOCK_ROWS = [
+  { claim_id: 'CLM-00192', date: '2024-03-12', peril: 'Collision',  loss_amount: 8420,  at_fault: true,  fraud_flag: false },
+  { claim_id: 'CLM-00193', date: '2024-03-14', peril: 'Theft',      loss_amount: 22100, at_fault: false, fraud_flag: true  },
+  { claim_id: 'CLM-00194', date: '2024-03-15', peril: 'Vandalism',  loss_amount: 1850,  at_fault: false, fraud_flag: false },
+  { claim_id: 'CLM-00195', date: '2024-03-18', peril: 'Collision',  loss_amount: 5670,  at_fault: true,  fraud_flag: false },
+  { claim_id: 'CLM-00196', date: '2024-03-19', peril: 'Fire',       loss_amount: 41300, at_fault: false, fraud_flag: true  },
+];
+const MOCK_NUMERIC_COLS = new Set(['loss_amount']);
 
 const SAMPLE_PROMPTS = [
   'Generate 10k auto fraud claims with realistic patterns — amplify the rare cases so models can actually learn',
@@ -67,12 +76,17 @@ export default function Landing(props: LandingProps) {
     schemaInferring,
     schemaError,
     profileSummary,
+    rowCount,
+    setRowCount,
+    format,
+    setFormat,
     ...promptProps
   } = props;
 
   const steps = buildSteps(groundingFiles.map((f) => f.name));
   const schemaRows = inferredSchema ? inferredSchema.slice(0, 4) : null;
   const extraCols = inferredSchema && inferredSchema.length > 4 ? inferredSchema.length - 4 : 0;
+  const mockCols = Object.keys(MOCK_ROWS[0]);
 
   return (
     <div className="landing">
@@ -85,6 +99,10 @@ export default function Landing(props: LandingProps) {
         {...promptProps}
         onGroundingFilesChange={onGroundingFilesChange}
         profileSummary={profileSummary}
+        rowCount={rowCount}
+        setRowCount={setRowCount}
+        format={format}
+        setFormat={setFormat}
       />
       {schemaError && (
         <p className="landing-schema-error" role="alert">{schemaError}</p>
@@ -114,10 +132,48 @@ export default function Landing(props: LandingProps) {
         ))}
       </div>
 
-      <div className="landing-output">
-        <div className="landing-output-col">
+      <div className="ws-preview-card landing-mock-table">
+        <div className="ws-preview-header">
+          <span className="ws-preview-title">Sample output · {MOCK_ROWS.length} rows</span>
+          <span className="ws-preview-badge">Synthetic</span>
+        </div>
+        <div className="ws-preview-scroll">
+          <table className="ws-preview-table">
+            <thead>
+              <tr>
+                {mockCols.map((col) => (
+                  <th key={col} className={MOCK_NUMERIC_COLS.has(col) ? 'ws-preview-th-num' : ''}>
+                    {col}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {MOCK_ROWS.map((row, i) => (
+                <tr key={i}>
+                  {mockCols.map((col) => {
+                    const val = row[col as keyof typeof row];
+                    const isNum = MOCK_NUMERIC_COLS.has(col);
+                    return (
+                      <td
+                        key={col}
+                        className={isNum ? 'ws-preview-td-num' : ''}
+                      >
+                        {isNum ? (val as number).toLocaleString() : String(val)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {schemaRows && (
+        <div className="landing-schema-card">
           <span className="landing-output-label">
-            Schema
+            Inferred schema
             {schemaInferring && <span className="landing-output-inferring">inferring…</span>}
           </span>
           <div className="landing-schema">
@@ -126,41 +182,19 @@ export default function Landing(props: LandingProps) {
               <span>Type</span>
               <span>Sample</span>
             </div>
-            {schemaRows
-              ? schemaRows.map((row) => (
-                  <div key={row.column} className="landing-schema-row">
-                    <span className="landing-schema-name">{row.column}</span>
-                    <span className="landing-schema-type">{row.type}</span>
-                    <span className="landing-schema-sample">{row.sample || '—'}</span>
-                  </div>
-                ))
-              : PLACEHOLDER_ROWS.map((_, i) => (
-                  <div key={i} className="landing-schema-row landing-schema-row-empty">
-                    <span className="landing-schema-name">—</span>
-                    <span className="landing-schema-type">—</span>
-                    <span className="landing-schema-sample">—</span>
-                  </div>
-                ))}
+            {schemaRows.map((row) => (
+              <div key={row.column} className="landing-schema-row">
+                <span className="landing-schema-name">{row.column}</span>
+                <span className="landing-schema-type">{row.type}</span>
+                <span className="landing-schema-sample">{row.sample || '—'}</span>
+              </div>
+            ))}
             {extraCols > 0 && (
               <div className="landing-schema-extra">+{extraCols} more column{extraCols > 1 ? 's' : ''}</div>
             )}
           </div>
         </div>
-
-        <div className="landing-output-col">
-          <span className="landing-output-label">Validation report</span>
-          <div className="landing-vp-metrics">
-            {VALIDATION_LABELS.map((label) => (
-              <div key={label} className="landing-vp-row">
-                <span className="landing-vp-row-label">{label}</span>
-                <div className="landing-vp-track" />
-                <span className="landing-vp-score landing-vp-score-empty">—</span>
-              </div>
-            ))}
-          </div>
-          <span className="landing-vp-hint">Scores appear after generation</span>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

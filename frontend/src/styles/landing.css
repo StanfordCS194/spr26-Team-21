@@ -110,6 +110,82 @@
   border-radius: 8px;
 }
 
+/* Generation controls inside the prompt box footer */
+.prompt-gen-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.prompt-rowcount {
+  width: 74px;
+  padding: 3px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--mono);
+  outline: none;
+  text-align: right;
+}
+
+.prompt-rowcount:focus {
+  border-color: var(--text-dim);
+}
+
+.prompt-rowcount-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-right: 4px;
+}
+
+.prompt-format-opts {
+  display: flex;
+  gap: 3px;
+}
+
+.prompt-format-opt {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 10px;
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  background: transparent;
+}
+
+.prompt-format-opt:hover {
+  border-color: var(--text-dim);
+  color: var(--text-muted);
+}
+
+.prompt-format-opt-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Mock output table */
+.landing-mock-table {
+  width: 100%;
+  margin-top: 10px;
+}
+
+/* Inferred schema card (shown only after file upload) */
+.landing-schema-card {
+  width: 100%;
+  margin-top: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 /* Sample prompts */
 .landing-samples {
   width: 100%;
@@ -186,30 +262,6 @@
   color: var(--text-dim);
   line-height: 1.55;
   margin: 0;
-}
-
-/* Output preview */
-.landing-output {
-  width: 100%;
-  margin-top: 10px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.landing-output-col {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 18px 20px;
-  background: var(--surface);
-}
-
-.landing-output-col + .landing-output-col {
-  border-left: 1px solid var(--border);
 }
 
 .landing-output-label {
@@ -291,53 +343,6 @@
   padding-top: 4px;
 }
 
-/* Validation metrics (shared, used in output preview) */
-.landing-vp-metrics {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.landing-vp-row {
-  display: grid;
-  grid-template-columns: 78px 1fr 26px;
-  align-items: center;
-  gap: 10px;
-}
-
-.landing-vp-row-label {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.landing-vp-track {
-  height: 3px;
-  background: var(--border);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.landing-vp-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 2px;
-}
-
-.landing-vp-score {
-  font-size: 11px;
-  color: var(--text-dim);
-  text-align: right;
-}
-
-.landing-vp-score-empty {
-  color: var(--border);
-}
-
-.landing-vp-hint {
-  font-size: 10px;
-  color: var(--text-dim);
-  margin-top: 6px;
-}
 
 @media (max-width: 720px) {
   .landing-title { font-size: 28px; }
@@ -349,12 +354,8 @@
     border-left: none;
     border-top: 1px solid var(--border);
   }
-  .landing-output {
-    grid-template-columns: 1fr;
-  }
-  .landing-output-col + .landing-output-col {
-    border-left: none;
-    border-top: 1px solid var(--border);
+  .prompt-gen-controls {
+    display: none;
   }
 }
 

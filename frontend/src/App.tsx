@@ -83,6 +83,8 @@ function App() {
     }
   }, [profiles]);
   const [selectedId, setSelectedId] = useState('default');
+  const [landingRowCount, setLandingRowCount] = useState(10_000);
+  const [landingFormat, setLandingFormat] = useState<'csv' | 'jsonl' | 'parquet'>('csv');
   const [messages, setMessages] = useState<WorkspaceMessage[]>([]);
   const [groundingFiles, setGroundingFiles] = useState<File[]>([]);
   const [landingSchema, setLandingSchema] = useState<SchemaColumn[] | null>(null);
@@ -322,8 +324,8 @@ function App() {
         originalPrompt: trimmed,
         schemaSource: 'agent',
         generationSpec: {
-          row_count: 10_000,
-          format: 'csv',
+          row_count: landingRowCount,
+          format: landingFormat,
           labels: [],
           edge_cases: [],
           constraints: [],
@@ -352,8 +354,8 @@ function App() {
         sourceId = result.source_id ?? null;
         schemaSource = 'upload';
         generationSpec = {
-          row_count: 10_000,
-          format: 'csv',
+          row_count: landingRowCount,
+          format: landingFormat,
           labels: [],
           edge_cases: [],
           constraints: [],
@@ -382,8 +384,8 @@ function App() {
         sourceId = result.source_id ?? null;
         schemaSource = 'upload';
         generationSpec = {
-          row_count: 10_000,
-          format: 'csv',
+          row_count: landingRowCount,
+          format: landingFormat,
           labels: [],
           edge_cases: [],
           constraints: [],
@@ -408,8 +410,8 @@ function App() {
         sourceId = result.source_id ?? null;
         schemaSource = 'upload';
         generationSpec = {
-          row_count: 10_000,
-          format: 'csv',
+          row_count: landingRowCount,
+          format: landingFormat,
           labels: [],
           edge_cases: [],
           constraints: [],
@@ -533,6 +535,10 @@ function App() {
           schemaInferring={schemaInferring}
           schemaError={schemaError}
           profileSummary={profileSummary}
+          rowCount={landingRowCount}
+          setRowCount={setLandingRowCount}
+          format={landingFormat}
+          setFormat={setLandingFormat}
         />
       ) : (
         <Workspace
