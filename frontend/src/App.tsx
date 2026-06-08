@@ -37,13 +37,31 @@ import {
 
 const PROFILES_STORAGE_KEY = 'aperture:profiles:v2';
 
+// The integrations we actually support, in display order.
+const CANONICAL_INTEGRATIONS = INITIAL_PROFILES[0].integrations;
+
+// Reconcile a stored profile against the canonical integration list: drop
+// integrations we no longer support and add newly-introduced ones, while
+// preserving any connection (enabled + config) the user already set up. This
+// migrates browsers that cached the old, longer integration list.
+function reconcileProfile(profile: Profile): Profile {
+  const stored = new Map((profile.integrations ?? []).map((i) => [i.slug, i]));
+  return {
+    ...profile,
+    integrations: CANONICAL_INTEGRATIONS.map((base) => {
+      const prev = stored.get(base.slug);
+      return prev ? { ...base, enabled: prev.enabled, config: prev.config } : { ...base };
+    }),
+  };
+}
+
 function loadProfiles(): Profile[] {
   try {
     const raw = localStorage.getItem(PROFILES_STORAGE_KEY);
     if (!raw) return INITIAL_PROFILES;
     const parsed = JSON.parse(raw) as Profile[];
     if (!Array.isArray(parsed) || parsed.length === 0) return INITIAL_PROFILES;
-    return parsed;
+    return parsed.map(reconcileProfile);
   } catch {
     return INITIAL_PROFILES;
   }
