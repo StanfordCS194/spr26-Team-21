@@ -1,0 +1,61 @@
+pack: fraud_oracle
+version: 1
+description: Domain rules for the Kaggle Oracle Insurance Fraud Detection schema (15,420 rows, 33 cols, 5.99% positive). Range constraints, categorical vocabulary, and a derived-column consistency check between PolicyType, VehicleCategory, and BasePolicy.
+sources:
+  - Kaggle "Oracle Insurance Fraud Detection" (2019, ID khusheekapoor/oracle-insurance-fraud-detection)
+  - schema verified against the 1994-1996 source release
+
+rules:
+  - id: F1_age_range
+    severity: hard
+    description: Driver age 16-100 (real-data Age=0 sentinel excluded as a synthesis target)
+    columns: [Age]
+    check: "16 <= Age <= 100"
+
+  - id: F2_year_range
+    severity: hard
+    description: Policy Year must be 1994, 1995, or 1996
+    columns: [Year]
+    check: "Year in (1994, 1995, 1996)"
+
+  - id: F3_week_of_month
+    severity: hard
+    description: WeekOfMonth in [1, 5]
+    columns: [WeekOfMonth]
+    check: "1 <= WeekOfMonth <= 5"
+
+  - id: F4_week_of_month_claimed
+    severity: hard
+    description: WeekOfMonthClaimed in [1, 5]
+    columns: [WeekOfMonthClaimed]
+    check: "1 <= WeekOfMonthClaimed <= 5"
+
+  - id: F5_driver_rating
+    severity: hard
+    description: DriverRating in [1, 4]
+    columns: [DriverRating]
+    check: "1 <= DriverRating <= 4"
+
+  - id: F6_deductible_vocab
+    severity: hard
+    description: Deductible in the discrete real-data set {300, 400, 500, 700}
+    columns: [Deductible]
+    check: "Deductible in (300, 400, 500, 700)"
+
+  - id: F7_fraud_binary
+    severity: hard
+    description: FraudFound_P must be 0 or 1
+    columns: [FraudFound_P]
+    check: "FraudFound_P in (0, 1)"
+
+  - id: F8_policy_type_vocab
+    severity: hard
+    description: PolicyType in the 9-value source vocabulary {Sedan|Sport|Utility} x {Liability|Collision|All Perils}
+    columns: [PolicyType]
+    check: "PolicyType in ('Sedan - All Perils','Sedan - Collision','Sedan - Liability','Sport - All Perils','Sport - Collision','Sport - Liability','Utility - All Perils','Utility - Collision','Utility - Liability')"
+
+  - id: F9_rep_number_range
+    severity: hard
+    description: RepNumber is an agent ID in [1, 16]
+    columns: [RepNumber]
+    check: "1 <= RepNumber <= 16"
