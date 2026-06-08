@@ -1,5 +1,6 @@
 """Column-type inference, distribution labels, summary statistics, and PII regexes."""
 import re
+import warnings
 from typing import Any
 
 import pandas as pd
@@ -22,13 +23,23 @@ def infer_col_type(series: pd.Series) -> str:
     if pd.api.types.is_datetime64_any_dtype(series):
         return "date"
     sample = series.dropna().astype(str).head(20)
+    if not len(sample):
+        return "enum"
     if sample.apply(lambda x: bool(UUID_RE.match(x))).mean() > 0.8:
         return "uuid"
-    try:
-        pd.to_datetime(sample, infer_datetime_format=True)
-        return "date"
-    except Exception:
-        pass
+    # Numeric-looking strings (e.g. claim amounts read from a CSV/JSON as text)
+    # should synthesize and validate as numbers, not as categories. Checked
+    # before the date heuristic so bare integers aren't misread as dates.
+    numeric = pd.to_numeric(sample, errors="coerce")
+    if numeric.notna().all():
+        return "int" if (numeric % 1 == 0).all() else "float"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            pd.to_datetime(sample, format="mixed")
+            return "date"
+        except Exception:
+            pass
     if sample.apply(lambda x: x.startswith("[") and x.endswith("]")).mean() > 0.5:
         return "array<str>"
     return "enum"

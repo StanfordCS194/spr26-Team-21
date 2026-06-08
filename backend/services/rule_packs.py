@@ -181,7 +181,12 @@ def _check_rule(df: pd.DataFrame, rule: dict) -> pd.Series:
 
     rid = rule["id"]
     if rid == "C1_claim_sum":
-        return (df["injury_claim"] + df["property_claim"] + df["vehicle_claim"] - df["total_claim_amount"]).abs() > 1
+        parts = [
+            pd.to_numeric(df[c], errors="coerce")
+            for c in ("injury_claim", "property_claim", "vehicle_claim", "total_claim_amount")
+        ]
+        injury, prop, vehicle, total = parts
+        return ((injury + prop + vehicle - total).abs() > 1).fillna(False)
     if rid == "C2_nonneg_claims":
         return (df[cols] < 0).any(axis=1)
     if rid == "C4_deductible_le_coverage":

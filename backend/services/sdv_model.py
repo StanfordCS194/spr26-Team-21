@@ -29,12 +29,16 @@ def fit_sdv_model(df: pd.DataFrame, col_info: list[dict]) -> str | None:
     col_names = [col for col, _ in sdv_cols]
     df_fit = df[col_names].copy()
 
-    # Normalise date columns to ISO strings that SDV expects
+    # Normalise columns to the dtype SDV expects for each sdtype.
     for col, ctype in sdv_cols:
         if ctype == "date":
             df_fit[col] = pd.to_datetime(df_fit[col], errors="coerce").dt.strftime("%Y-%m-%d")
         elif ctype == "bool":
             df_fit[col] = df_fit[col].astype(str)
+        elif ctype in ("int", "float"):
+            # Numeric columns that arrived as text (CSV/JSON) must be real numbers
+            # so SDV models them numerically and the synthetic output stays numeric.
+            df_fit[col] = pd.to_numeric(df_fit[col], errors="coerce")
 
     df_fit = df_fit.dropna(how="all")
     if len(df_fit) < 5:
