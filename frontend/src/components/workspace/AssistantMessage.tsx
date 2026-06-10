@@ -54,6 +54,12 @@ export default function AssistantMessage({
 
   const [rowCount, setRowCount] = useState(generationSpec?.row_count ?? 10_000);
   const [format, setFormat] = useState<Format>(generationSpec?.format ?? 'csv');
+  // 'auto' lets the task-aware router pick; 'tabsyn' forces offline TabSyn pool;
+  // 'cached' uses the SDV model the schema endpoint fitted (GaussianCopula by default).
+  type SynthChoice = 'auto' | 'tabsyn' | 'cached';
+  const [synthChoice, setSynthChoice] = useState<SynthChoice>('auto');
+  const effectiveModelId =
+    synthChoice === 'auto' ? null : synthChoice === 'tabsyn' ? 'tabsyn' : modelId;
 
   const [previewRows, setPreviewRows] = useState<Record<string, unknown>[] | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -111,7 +117,7 @@ export default function AssistantMessage({
       const result = await previewDataset(
         schema,
         (sourceStats as SourceStats) ?? {},
-        modelId,
+        effectiveModelId,
         mergedEdgeCases(),
       );
       setPreviewRows(result.rows);
@@ -134,7 +140,7 @@ export default function AssistantMessage({
         originalPrompt ?? '',
         format,
         mergedEdgeCases(),
-        modelId,
+        effectiveModelId,
         sourceId,
         discoveredSuggestions,
       );
@@ -274,9 +280,21 @@ export default function AssistantMessage({
                             ))}
                           </div>
                         </div>
-                        <span className={`ws-synth-badge${modelId ? ' ws-synth-badge-sdv' : ''}`}>
-                          {modelId ? 'SDV · correlation-preserving' : 'Statistical sampler'}
-                        </span>
+                        <div className="ws-gen-control-group">
+                          <label className="ws-gen-control-label">Synthesizer</label>
+                          <select
+                            className="ws-rowcount-input"
+                            value={synthChoice}
+                            onChange={(e) => setSynthChoice(e.target.value as SynthChoice)}
+                            title="Auto routes by task type; TabSyn is the diffusion model trained on Sherlock; GaussianCopula is the SDV baseline fitted on upload."
+                          >
+                            <option value="auto">Auto (task-aware router)</option>
+                            <option value="tabsyn">TabSyn (diffusion · ICLR 2024)</option>
+                            <option value="cached" disabled={!modelId}>
+                              GaussianCopula (SDV)
+                            </option>
+                          </select>
+                        </div>
                         <button
                           className="ws-preview-btn"
                           onClick={handlePreview}
