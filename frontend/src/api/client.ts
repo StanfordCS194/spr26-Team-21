@@ -54,6 +54,32 @@ export interface DiversityIssue {
   status: 'pass' | 'warn' | 'fail';
 }
 
+export interface ExactMatchPrivacyValidation {
+  matchCount: number;
+  matchPct: number;
+  rowsChecked: number;
+  sharedColumnsChecked: string[];
+  status: 'pass' | 'fail';
+  note: string;
+}
+
+export interface NearestNeighborPrivacyValidation {
+  minDistance: number | null;
+  medianDistance: number | null;
+  p05Distance: number | null;
+  rowsBelowThreshold: number;
+  rowsBelowThresholdPct: number;
+  threshold: number;
+  numericColumnsChecked: string[];
+  status: 'pass' | 'warn' | 'fail';
+  note: string;
+}
+
+export interface PrivacyValidation {
+  exactMatch?: ExactMatchPrivacyValidation | null;
+  nearestNeighbor?: NearestNeighborPrivacyValidation | null;
+}
+
 export interface ValidationReportData {
   verdict: string;
   verdictStatus: 'pass' | 'warn' | 'fail';
@@ -63,6 +89,7 @@ export interface ValidationReportData {
   edgeCases?: EdgeCaseResult[];
   duplicates?: DuplicatesCheck;
   diversityIssues?: DiversityIssue[];
+  privacyValidation?: PrivacyValidation;
 }
 
 export interface ConfusionMatrix {

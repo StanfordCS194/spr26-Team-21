@@ -43,6 +43,11 @@ def _edge_case_buckets(validation: dict) -> tuple[list[dict], list[dict], list[d
     return met, unmet, unparsed
 
 
+def _privacy_validation_checks(validation: dict) -> tuple[dict, dict]:
+    privacy = validation.get("privacyValidation") or {}
+    return privacy.get("exactMatch") or {}, privacy.get("nearestNeighbor") or {}
+
+
 def classify_suitability(validation: dict, source_stats: dict | None = None) -> dict[str, Any]:
     """Tier the dataset and produce stakeholder-readable fit / not-fit lists."""
     realism = _metric_score(validation, "realism")
@@ -51,9 +56,14 @@ def classify_suitability(validation: dict, source_stats: dict | None = None) -> 
     has_source = _has_grounding(source_stats)
     critical_drift = bool(_failing_columns(validation))
     _, unmet, _ = _edge_case_buckets(validation)
+    exact_privacy, nearest_privacy = _privacy_validation_checks(validation)
+    privacy_failed = (
+        exact_privacy.get("status") == "fail"
+        or nearest_privacy.get("status") == "fail"
+    )
     pii_flagged = safety < 90
 
-    if pii_flagged or realism < 70 or critical_drift:
+    if pii_flagged or realism < 70 or critical_drift or privacy_failed:
         tier = "review_required"
     elif realism >= 90 and safety >= 90 and not unmet:
         tier = "high_confidence"
@@ -127,6 +137,12 @@ def classify_suitability(validation: dict, source_stats: dict | None = None) -> 
         rationale_parts.append(f"{len(_failing_columns(validation))} column(s) failing fidelity")
     if unmet:
         rationale_parts.append(f"{len(unmet)} edge case(s) below target")
+    if exact_privacy.get("status") == "fail":
+        rationale_parts.append(f"{exact_privacy.get('matchCount', 0)} exact source-row match(es)")
+    if nearest_privacy.get("status") == "fail":
+        rationale_parts.append(
+            f"{nearest_privacy.get('rowsBelowThreshold', 0)} row(s) below nearest-neighbor privacy threshold"
+        )
 
     return {
         "tier": tier,
@@ -146,6 +162,7 @@ def derive_risks(validation: dict, source_stats: dict | None = None) -> list[dic
     failing = _failing_columns(validation)
     warnings = _warning_columns(validation)
     _, unmet, unparsed = _edge_case_buckets(validation)
+    exact_privacy, nearest_privacy = _privacy_validation_checks(validation)
 
     if safety < 90:
         risks.append({
@@ -153,6 +170,28 @@ def derive_risks(validation: dict, source_stats: dict | None = None) -> list[dic
             "title": "PII-like patterns detected in output",
             "detail": "Regex scan found values matching email, phone, or SSN patterns. "
                       "Remove or redact these columns before sharing externally.",
+        })
+
+    if exact_privacy.get("status") == "fail":
+        risks.append({
+            "severity": "critical",
+            "title": "Exact source-row matches detected",
+            "detail": (
+                f"{exact_privacy.get('matchCount', 0):,} synthetic row(s) exactly matched "
+                "source rows after normalization. Regenerate or filter matched rows before use."
+            ),
+        })
+
+    if nearest_privacy.get("status") in ("warn", "fail") and nearest_privacy.get("rowsBelowThreshold", 0) > 0:
+        severity = "critical" if nearest_privacy.get("status") == "fail" else "warn"
+        risks.append({
+            "severity": severity,
+            "title": "Nearest-neighbor privacy risk",
+            "detail": (
+                f"{nearest_privacy.get('rowsBelowThreshold', 0):,} synthetic row(s) "
+                f"({nearest_privacy.get('rowsBelowThresholdPct', 0)}%) were closer than "
+                f"the {nearest_privacy.get('threshold')} threshold to a source record."
+            ),
         })
 
     duplicates = validation.get("duplicates") or {}
@@ -233,9 +272,21 @@ def derive_next_steps(validation: dict, source_stats: dict | None = None) -> lis
     safety = _metric_score(validation, "safety", default=100)
     failing = _failing_columns(validation)
     _, unmet, unparsed = _edge_case_buckets(validation)
+    exact_privacy, nearest_privacy = _privacy_validation_checks(validation)
 
     if safety < 90:
         steps.append("Remove or redact PII-flagged columns before sharing the dataset externally.")
+
+    if exact_privacy.get("status") == "fail":
+        steps.append(
+            "Regenerate or remove exact source-row matches before sharing or using the dataset downstream."
+        )
+
+    if nearest_privacy.get("status") in ("warn", "fail") and nearest_privacy.get("rowsBelowThreshold", 0) > 0:
+        steps.append(
+            "Review rows below the nearest-neighbor distance threshold and regenerate with stronger "
+            "privacy constraints if they reflect source-record memorization."
+        )
 
     duplicates = validation.get("duplicates") or {}
     if duplicates.get("status") in ("warn", "fail"):

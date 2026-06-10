@@ -4,7 +4,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from services.inference import EMAIL_RE, PHONE_RE, SSN_RE
+from services.inference import EMAIL_RE, PHONE_RE, SSN_RE, UUID_RE
 
 TAIL_QUANTILES = (0.90, 0.95, 0.99)
 TAIL_DRIFT_WARN_THRESHOLD = 0.25
@@ -32,6 +32,12 @@ QI_NAME_PATTERNS = ("age", "gender", "sex", "zip", "postal", "race", "ethnicity"
 # P2: Moment drift thresholds
 SKEW_DRIFT_WARN = 0.50
 KURT_DRIFT_WARN = 1.00
+
+# Source-backed privacy validation
+NEAREST_NEIGHBOR_DISTANCE_THRESHOLD = 0.05
+NEAREST_NEIGHBOR_FAIL_PCT = 1.0
+PRIVACY_MISSING_VALUE = "<missing>"
+ID_COLUMN_NAME_TOKENS = ("id", "uuid", "guid", "key")
 
 #created a helper function to compare synthetic p90/p95/p99 against source p90/p95/p99 when available
 def validate_tail_preservation(col: str, stat: dict, synth_s: pd.Series) -> dict[str, Any] | None:
@@ -564,6 +570,241 @@ def validate_k_anonymity(
     }
 
 
+def _looks_like_id_column(col: str, source_s: pd.Series | None = None, synth_s: pd.Series | None = None) -> bool:
+    """Detect fresh identifier columns that can mask copied non-ID row content."""
+    lower = str(col).strip().lower()
+    normalized = lower.replace("-", "_").replace(" ", "_")
+    tokens = [token for token in normalized.split("_") if token]
+
+    name_looks_id_like = (
+        normalized in ID_COLUMN_NAME_TOKENS
+        or normalized.endswith("_id")
+        or normalized.endswith("_uuid")
+        or normalized.endswith("_guid")
+        or normalized.endswith("_key")
+        or normalized in {"row_number", "record_number", "index"}
+        or "identifier" in normalized
+    )
+
+    sample_parts = []
+    for s in (source_s, synth_s):
+        if s is None:
+            continue
+        sample = s.dropna().astype(str).head(100)
+        if not sample.empty:
+            sample_parts.append(sample)
+    if sample_parts:
+        combined = pd.concat(sample_parts, ignore_index=True)
+        uuid_like = combined.apply(lambda v: bool(UUID_RE.match(v.strip()))).mean() >= 0.8
+        if uuid_like:
+            return True
+
+    return name_looks_id_like or any(token in ID_COLUMN_NAME_TOKENS for token in tokens)
+
+
+def _privacy_shared_columns(
+    source_df: pd.DataFrame,
+    synth_df: pd.DataFrame,
+    *,
+    numeric_only: bool = False,
+) -> tuple[list[str], list[str]]:
+    checked: list[str] = []
+    excluded: list[str] = []
+    for col in source_df.columns:
+        if col not in synth_df.columns:
+            continue
+        if _looks_like_id_column(col, source_df[col], synth_df[col]):
+            excluded.append(col)
+            continue
+        if numeric_only:
+            source_numeric = pd.to_numeric(source_df[col], errors="coerce").replace([np.inf, -np.inf], np.nan)
+            synth_numeric = pd.to_numeric(synth_df[col], errors="coerce").replace([np.inf, -np.inf], np.nan)
+            if source_numeric.notna().sum() < 2 or synth_numeric.notna().sum() < 2:
+                continue
+            if source_numeric.dropna().nunique() < 2:
+                continue
+        checked.append(col)
+    return checked, excluded
+
+
+def _normalize_exact_match_frame(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    normalized = df[columns].copy()
+    normalized = normalized.where(pd.notna(normalized), PRIVACY_MISSING_VALUE)
+    normalized = normalized.astype(str)
+    return normalized.apply(lambda s: s.str.strip().str.lower())
+
+
+def _privacy_note(base: str, excluded_columns: list[str]) -> str:
+    if not excluded_columns:
+        return base
+    shown = ", ".join(excluded_columns[:5])
+    suffix = "..." if len(excluded_columns) > 5 else ""
+    return f"{base} Excluded fresh ID/UUID-like columns: {shown}{suffix}."
+
+
+def validate_exact_match_privacy(
+    source_df: pd.DataFrame | None,
+    synth_df: pd.DataFrame,
+) -> dict[str, Any] | None:
+    """Compare normalized synthetic rows against source rows over shared non-ID columns."""
+    if source_df is None or source_df.empty:
+        return None
+
+    rows_checked = int(len(synth_df))
+    if rows_checked == 0:
+        return {
+            "matchCount": 0,
+            "matchPct": 0.0,
+            "rowsChecked": 0,
+            "sharedColumnsChecked": [],
+            "status": "pass",
+            "note": "Exact source-row match check skipped because the synthetic dataset is empty.",
+        }
+
+    shared_cols, excluded_cols = _privacy_shared_columns(source_df, synth_df)
+    if not shared_cols:
+        return {
+            "matchCount": 0,
+            "matchPct": 0.0,
+            "rowsChecked": rows_checked,
+            "sharedColumnsChecked": [],
+            "status": "pass",
+            "note": _privacy_note(
+                "Exact source-row match check skipped because there are no shared non-ID columns.",
+                excluded_cols,
+            ),
+        }
+
+    source_norm = _normalize_exact_match_frame(source_df, shared_cols)
+    synth_norm = _normalize_exact_match_frame(synth_df, shared_cols)
+    source_rows = set(map(tuple, source_norm.to_numpy(dtype=object)))
+    match_count = int(sum(tuple(row) in source_rows for row in synth_norm.to_numpy(dtype=object)))
+    match_pct = round(match_count / max(rows_checked, 1) * 100, 4)
+    status = "fail" if match_count > 0 else "pass"
+    if status == "fail":
+        note = (
+            f"{match_count:,} synthetic row{'s' if match_count != 1 else ''} exactly matched "
+            "a source row after normalization."
+        )
+    else:
+        note = "No normalized synthetic rows exactly matched source rows."
+
+    return {
+        "matchCount": match_count,
+        "matchPct": match_pct,
+        "rowsChecked": rows_checked,
+        "sharedColumnsChecked": shared_cols,
+        "status": status,
+        "note": _privacy_note(note, excluded_cols),
+    }
+
+
+def _nearest_neighbor_skip(note: str, numeric_columns: list[str] | None = None) -> dict[str, Any]:
+    return {
+        "minDistance": None,
+        "medianDistance": None,
+        "p05Distance": None,
+        "rowsBelowThreshold": 0,
+        "rowsBelowThresholdPct": 0.0,
+        "threshold": NEAREST_NEIGHBOR_DISTANCE_THRESHOLD,
+        "numericColumnsChecked": numeric_columns or [],
+        "status": "pass",
+        "note": note,
+    }
+
+
+def validate_nearest_neighbor_privacy(
+    source_df: pd.DataFrame | None,
+    synth_df: pd.DataFrame,
+) -> dict[str, Any] | None:
+    """Compute standardized numeric nearest-neighbor distance from synth rows to source rows."""
+    if source_df is None or source_df.empty:
+        return None
+    if synth_df.empty:
+        return _nearest_neighbor_skip(
+            "Nearest-neighbor privacy check skipped because the synthetic dataset is empty."
+        )
+
+    try:
+        from sklearn.neighbors import NearestNeighbors
+        from sklearn.preprocessing import StandardScaler
+    except ImportError:
+        return _nearest_neighbor_skip(
+            "scikit-learn is not installed; nearest-neighbor privacy check could not run."
+        )
+
+    numeric_cols, excluded_cols = _privacy_shared_columns(source_df, synth_df, numeric_only=True)
+    if len(numeric_cols) < 2:
+        note = "Nearest-neighbor privacy check skipped because fewer than 2 usable shared numeric columns were available."
+        return _nearest_neighbor_skip(_privacy_note(note, excluded_cols), numeric_cols)
+
+    source_numeric = source_df[numeric_cols].apply(pd.to_numeric, errors="coerce")
+    synth_numeric = synth_df[numeric_cols].apply(pd.to_numeric, errors="coerce")
+    source_numeric = source_numeric.replace([np.inf, -np.inf], np.nan)
+    synth_numeric = synth_numeric.replace([np.inf, -np.inf], np.nan)
+
+    medians = source_numeric.median(numeric_only=True).fillna(0.0)
+    source_clean = source_numeric.fillna(medians)
+    synth_clean = synth_numeric.fillna(medians)
+
+    usable_cols = [col for col in numeric_cols if source_clean[col].nunique(dropna=True) > 1]
+    if len(usable_cols) < 2:
+        note = "Nearest-neighbor privacy check skipped because fewer than 2 non-constant numeric columns remained."
+        return _nearest_neighbor_skip(_privacy_note(note, excluded_cols), usable_cols)
+
+    source_clean = source_clean[usable_cols]
+    synth_clean = synth_clean[usable_cols]
+
+    try:
+        scaler = StandardScaler()
+        source_scaled = scaler.fit_transform(source_clean)
+        synth_scaled = scaler.transform(synth_clean)
+        nn = NearestNeighbors(n_neighbors=1)
+        nn.fit(source_scaled)
+        distances = nn.kneighbors(synth_scaled, return_distance=True)[0].reshape(-1)
+    except Exception as exc:
+        return _nearest_neighbor_skip(
+            _privacy_note(f"Nearest-neighbor privacy check could not run: {exc}", excluded_cols),
+            usable_cols,
+        )
+
+    if len(distances) == 0:
+        return _nearest_neighbor_skip(
+            _privacy_note("Nearest-neighbor privacy check skipped because no distances were produced.", excluded_cols),
+            usable_cols,
+        )
+
+    rows_below = int((distances < NEAREST_NEIGHBOR_DISTANCE_THRESHOLD).sum())
+    rows_below_pct = round(rows_below / max(len(distances), 1) * 100, 4)
+    if rows_below == 0:
+        status = "pass"
+        note = "No synthetic rows were closer than the nearest-neighbor privacy threshold."
+    elif rows_below_pct >= NEAREST_NEIGHBOR_FAIL_PCT:
+        status = "fail"
+        note = (
+            f"{rows_below:,} synthetic row{'s' if rows_below != 1 else ''} "
+            "fell below the nearest-neighbor privacy threshold."
+        )
+    else:
+        status = "warn"
+        note = (
+            f"{rows_below:,} synthetic row{'s' if rows_below != 1 else ''} "
+            "fell below the nearest-neighbor privacy threshold, below the fail percentage."
+        )
+
+    return {
+        "minDistance": round(float(np.min(distances)), 6),
+        "medianDistance": round(float(np.median(distances)), 6),
+        "p05Distance": round(float(np.quantile(distances, 0.05)), 6),
+        "rowsBelowThreshold": rows_below,
+        "rowsBelowThresholdPct": rows_below_pct,
+        "threshold": NEAREST_NEIGHBOR_DISTANCE_THRESHOLD,
+        "numericColumnsChecked": usable_cols,
+        "status": status,
+        "note": _privacy_note(note, excluded_cols),
+    }
+
+
 DUPLICATE_WARN_PCT = 1.0
 DUPLICATE_FAIL_PCT = 5.0
 MODE_DOMINANCE_WARN = 0.95
@@ -759,6 +1000,16 @@ def validate(
         if source_available
         else None
     )
+    exact_match_privacy = (
+        validate_exact_match_privacy(source_df, synth_df)
+        if source_available
+        else None
+    )
+    nearest_neighbor_privacy = (
+        validate_nearest_neighbor_privacy(source_df, synth_df)
+        if source_available
+        else None
+    )
     k_anon = validate_k_anonymity(synth_df, source_stats)
 
     if duplicates["status"] == "fail":
@@ -850,6 +1101,24 @@ def validate(
                 f"Pearson correlation structure preserved across {corr_drift['colsChecked']} numeric columns"
             )
 
+    if exact_match_privacy:
+        if exact_match_privacy["status"] == "fail":
+            insights.append("Exact source-row matches detected — privacy review required")
+        elif exact_match_privacy.get("sharedColumnsChecked"):
+            insights.append("No exact source-row matches detected")
+        elif exact_match_privacy.get("note"):
+            insights.append(exact_match_privacy["note"])
+
+    if nearest_neighbor_privacy:
+        if nearest_neighbor_privacy.get("minDistance") is None:
+            insights.append(nearest_neighbor_privacy["note"])
+        elif nearest_neighbor_privacy["status"] in ("warn", "fail"):
+            insights.append(
+                "Nearest-neighbor privacy risk detected — some synthetic rows are very close to source records"
+            )
+        else:
+            insights.append("Nearest-neighbor privacy check passed")
+
     if k_anon:
         if k_anon["status"] in ("warn", "fail"):
             insights.append(
@@ -897,10 +1166,14 @@ def validate(
         f"Inter-column correlations preserved within {abs(100 - realism)}% of source statistics"
     )
 
-    overall_pass = realism >= 85 and diversity >= 75 and safety >= 90
+    privacy_hard_fail = any(
+        result and result.get("status") == "fail"
+        for result in (exact_match_privacy, nearest_neighbor_privacy)
+    )
+    overall_pass = realism >= 85 and diversity >= 75 and safety >= 90 and not privacy_hard_fail
     result = {
         "verdict": "Ready for use" if overall_pass else "Review recommended",
-        "verdictStatus": "pass" if overall_pass else "warn",
+        "verdictStatus": "pass" if overall_pass else "fail" if privacy_hard_fail else "warn",
         "metrics": [
             {"label": "Realism", "score": realism, "status": "pass" if realism >= 85 else "warn"},
             {"label": "Diversity", "score": diversity, "status": "pass" if diversity >= 75 else "warn"},
@@ -921,6 +1194,11 @@ def validate(
         result["distributionDistance"] = dist_distance
     if corr_drift:
         result["correlationDrift"] = corr_drift
+    if source_available:
+        result["privacyValidation"] = {
+            "exactMatch": exact_match_privacy,
+            "nearestNeighbor": nearest_neighbor_privacy,
+        }
     if k_anon:
         result["kAnonymity"] = k_anon
     return result
