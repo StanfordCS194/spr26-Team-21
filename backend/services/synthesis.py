@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 from core.state import sdv_models
+from services.synthesizer_router import is_offline_synthesizer, route_synthesizer
 
 def synth_column(col_name: str, stat: dict, n: int) -> list:
     col_type = stat.get("col_type", "enum")
@@ -72,7 +73,23 @@ def synthesize(
     n: int,
     model_id: str | None,
 ) -> pd.DataFrame:
-    """Generate `n` synthetic rows, preferring the fitted SDV model when available."""
+    """Generate `n` synthetic rows.
+
+    Routing order:
+      1. Offline diffusion backends (TabSyn, TabDDPM) when model_id is one of
+         their sentinels. Served from Sherlock-trained outputs on disk.
+      2. SDV-fitted model from the per-session cache (GaussianCopula / CTGAN).
+      3. Per-column statistical sampler as the last-resort fallback.
+    """
+    if is_offline_synthesizer(model_id):
+        try:
+            df = route_synthesizer(model_id, n, schema_columns, source_stats)
+            return _inject_nulls(df, schema_columns)
+        except Exception as e:
+            # Surface the failure as a row in the data so the user sees what went wrong
+            # instead of getting a silent statistical fallback that looks like real output.
+            raise RuntimeError(f"Offline synthesizer {model_id!r} failed: {e}") from e
+
     if model_id and model_id in sdv_models:
         entry = sdv_models[model_id]
         synthesizer = entry["synthesizer"]
