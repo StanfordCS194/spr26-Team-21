@@ -76,18 +76,22 @@ def synthesize(
     """Generate `n` synthetic rows.
 
     Routing order:
-      1. Offline diffusion backends (TabSyn, TabDDPM) when model_id is one of
-         their sentinels. Served from Sherlock-trained outputs on disk.
-      2. SDV-fitted model from the per-session cache (GaussianCopula / CTGAN).
+      0. If caller did not pin model_id, the task-aware router maps the schema
+         + source stats to a generator id from {tabsyn, tabddpm, gaussian_copula}.
+      1. Offline diffusion backends (tabsyn/tabddpm) — served from Sherlock-
+         trained outputs by services.synthesizer_router.
+      2. SDV cache (a previously-fitted GaussianCopula / CTGAN for this session).
       3. Per-column statistical sampler as the last-resort fallback.
     """
+    if model_id is None:
+        from services.task_aware_router import pick_synthesizer
+        model_id, _detected_task = pick_synthesizer(schema_columns, source_stats)
+
     if is_offline_synthesizer(model_id):
         try:
             df = route_synthesizer(model_id, n, schema_columns, source_stats)
             return _inject_nulls(df, schema_columns)
         except Exception as e:
-            # Surface the failure as a row in the data so the user sees what went wrong
-            # instead of getting a silent statistical fallback that looks like real output.
             raise RuntimeError(f"Offline synthesizer {model_id!r} failed: {e}") from e
 
     if model_id and model_id in sdv_models:
