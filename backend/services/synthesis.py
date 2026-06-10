@@ -72,7 +72,20 @@ def synthesize(
     n: int,
     model_id: str | None,
 ) -> pd.DataFrame:
-    """Generate `n` synthetic rows, preferring the fitted SDV model when available."""
+    """Generate `n` synthetic rows.
+
+    Routing order:
+      0. If caller did not pin model_id, the task-aware router maps the schema
+         + source stats to a generator id from {tabsyn, tabddpm, gaussian_copula}.
+      1. Offline diffusion backends (tabsyn/tabddpm) — served from Sherlock-
+         trained outputs by services.synthesizer_router.
+      2. SDV cache (a previously-fitted GaussianCopula / CTGAN for this session).
+      3. Per-column statistical sampler as the last-resort fallback.
+    """
+    if model_id is None:
+        from services.task_aware_router import pick_synthesizer
+        model_id, _detected_task = pick_synthesizer(schema_columns, source_stats)
+
     if model_id and model_id in sdv_models:
         entry = sdv_models[model_id]
         synthesizer = entry["synthesizer"]

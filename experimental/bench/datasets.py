@@ -127,11 +127,119 @@ def load_pima_diabetes() -> Dataset:
     )
 
 
+# ── Insurance: Medical Cost Personal ─────────────────────────────────────────
+# Kaggle mirichoi0218/insurance — small (1,338 rows × 7 cols), regression on
+# `charges`. This is the dataset TabDDPM (Kotelnikov et al., ICML 2023) labels
+# "insurance" in their experiments; we re-use it as the small-data premium-
+# regression task in the insurance benchmark suite.
+
+_MEDICAL_COST_URLS = [
+    "https://raw.githubusercontent.com/stedy/Machine-Learning-with-R-datasets/master/insurance.csv",
+    "https://raw.githubusercontent.com/AndreaCasalino/MedicalCost/master/insurance.csv",
+]
+
+
+def load_medical_cost_personal() -> Dataset:
+    """Medical Cost Personal — 1,338 rows, regression on insurance charges."""
+    dest = DATA_DIR / "medical_cost_personal.csv"
+    if not dest.exists() or dest.stat().st_size < 10_000:
+        last_err = None
+        for url in _MEDICAL_COST_URLS:
+            try:
+                _download_if_missing(url, dest)
+                if dest.stat().st_size > 10_000:
+                    break
+            except Exception as e:
+                last_err = e
+        if not dest.exists():
+            raise RuntimeError(f"Could not download medical_cost_personal.csv: {last_err}")
+
+    df = pd.read_csv(dest)
+    label_col = "charges"
+    df["_bin"] = pd.qcut(df[label_col], q=10, labels=False, duplicates="drop")
+    train_df, holdout_df = _stratified_split(df, "_bin")
+    train_df = train_df.drop(columns=["_bin"])
+    holdout_df = holdout_df.drop(columns=["_bin"])
+    return Dataset(
+        name="medical_cost_personal", train_df=train_df, holdout_df=holdout_df,
+        label_col=label_col, domain="insurance",
+    )
+
+
+# ── Insurance: freMTPL2 frequency ────────────────────────────────────────────
+# French Motor Third-Party Liability — 678k policies. The canonical actuarial
+# count-regression benchmark; target is ClaimNb with Exposure offset.
+# Source: OpenML 41214 (Python mirror of the R CASdatasets release).
+
+def load_fremtpl2_freq() -> Dataset:
+    """freMTPL2_freq — 80k sampled rows, Poisson count regression on ClaimNb."""
+    dest = DATA_DIR / "fremtpl2_freq.csv"
+    if not dest.exists() or dest.stat().st_size < 1_000_000:
+        try:
+            import openml
+        except ImportError as e:
+            raise RuntimeError(
+                "loading freMTPL2 needs `pip install openml`. "
+                "The CSV mirror is at openml.org/d/41214."
+            ) from e
+        ds = openml.datasets.get_dataset(41214, download_data=True, download_features_meta_data=False)
+        x, _, _, _ = ds.get_data(dataset_format="dataframe")
+        x.to_csv(dest, index=False)
+
+    df = pd.read_csv(dest)
+    label_col = "ClaimNb"
+    if len(df) > 80_000:
+        df = df.sample(80_000, random_state=_RANDOM_STATE).reset_index(drop=True)
+    df["_has_claim"] = (df[label_col] > 0).astype(int)
+    train_df, holdout_df = _stratified_split(df, "_has_claim")
+    train_df = train_df.drop(columns=["_has_claim"])
+    holdout_df = holdout_df.drop(columns=["_has_claim"])
+    return Dataset(
+        name="fremtpl2_freq", train_df=train_df, holdout_df=holdout_df,
+        label_col=label_col, domain="insurance",
+    )
+
+
+# ── Insurance: Allstate Claims Severity ──────────────────────────────────────
+# Kaggle Allstate Claim Severity 2016 — 188k rows, heavy-tailed regression on
+# `loss`. Source: OpenML 42571 (a mirror of the Kaggle release).
+
+def load_allstate_sev() -> Dataset:
+    """Allstate Claim Severity — 40k sampled rows, regression on log(loss) (heavy-tailed)."""
+    dest = DATA_DIR / "allstate_sev.csv"
+    if not dest.exists() or dest.stat().st_size < 1_000_000:
+        try:
+            import openml
+        except ImportError as e:
+            raise RuntimeError(
+                "loading allstate_sev needs `pip install openml`. Mirror at openml.org/d/42571."
+            ) from e
+        ds = openml.datasets.get_dataset(42571, download_data=True, download_features_meta_data=False)
+        x, _, _, _ = ds.get_data(dataset_format="dataframe")
+        x.to_csv(dest, index=False)
+
+    df = pd.read_csv(dest)
+    label_col = "loss"
+    if len(df) > 40_000:
+        df = df.sample(40_000, random_state=_RANDOM_STATE).reset_index(drop=True)
+    df["_bin"] = pd.qcut(df[label_col], q=10, labels=False, duplicates="drop")
+    train_df, holdout_df = _stratified_split(df, "_bin")
+    train_df = train_df.drop(columns=["_bin"])
+    holdout_df = holdout_df.drop(columns=["_bin"])
+    return Dataset(
+        name="allstate_sev", train_df=train_df, holdout_df=holdout_df,
+        label_col=label_col, domain="insurance",
+    )
+
+
 # ── Registry ─────────────────────────────────────────────────────────────────
 
 LOADERS = {
     "fraud_oracle": load_fraud_oracle,
     "pima_diabetes": load_pima_diabetes,
+    "medical_cost_personal": load_medical_cost_personal,
+    "fremtpl2_freq": load_fremtpl2_freq,
+    "allstate_sev": load_allstate_sev,
 }
 
 
