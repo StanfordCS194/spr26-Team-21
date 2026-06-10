@@ -14,6 +14,7 @@ fall through to the SDV path in `synthesis.synthesize`.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,9 @@ import pandas as pd
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent  # backend/services/.. = backend/.. = repo
 TABSYN_DEFAULT_SAMPLES = _REPO_ROOT / "experimental/training/tabsyn/samples"
 TABDDPM_DEFAULT_CHECKPOINTS = _REPO_ROOT / "experimental/training/tabddpm/checkpoints"
+
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 
 def is_offline_synthesizer(model_id: str | None) -> bool:

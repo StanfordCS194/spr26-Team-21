@@ -44,7 +44,7 @@ _FALLBACK = {
 }
 
 # Column-name regexes for the rule layer. Insurance-domain vocabulary.
-_FRAUD_RE = re.compile(r"(fraud|is_fraud|fraud_reported|fraud_found)", re.I)
+_FRAUD_RE = re.compile(r"fraud", re.I)
 _UNDERWRITING_RE = re.compile(r"(risk|response|purchase|cross_sell|churn|propensity|conversion|target)", re.I)
 _COUNT_RE = re.compile(r"(claim|incident|event|loss).*?(nb|num|count|cnt)|claimnb|claim_count", re.I)
 _EXPOSURE_RE = re.compile(r"(exposure|years_held|duration|term)", re.I)
