@@ -2,3 +2,4 @@ dataset,n_train,label_col,TabSyn_TSTR,TabSyn_TRTR,TabSyn_DetAUC,TabSyn_RulePack,
 fraud_oracle,12336,FraudFound_P,0.7654,0.8364,0.6096,fraud_oracle,315.0,0.4803,0.8364,0.9906,fraud_oracle,75.0
 medical_cost_personal,1070,charges,,,0.8632,,,,,0.8616,,
 fremtpl2_freq,64000,ClaimNb,,,0.6892,,,,,0.9985,,
+allstate_sev,32000,loss,,,0.9971,,,,,0.9999,,

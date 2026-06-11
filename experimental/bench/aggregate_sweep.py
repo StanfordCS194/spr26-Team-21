@@ -33,7 +33,16 @@ from services.utility import compute_utility
 def _tabsyn_path(dataset_name: str, seed: int = 0) -> Path:
     if dataset_name == "fraud_oracle":
         return _REPO / "experimental/training/tabsyn/samples/seed_0/synth.csv"
-    return _REPO / f"experimental/training/tabsyn/samples/{dataset_name}_seed{seed}/synth.csv"
+    # For datasets where seed 0 hadn't finished training but other seeds did,
+    # fall through to the first seed that has a synth.csv on disk.
+    candidates = [
+        _REPO / f"experimental/training/tabsyn/samples/{dataset_name}_seed{s}/synth.csv"
+        for s in (seed, 0, 1, 2)
+    ]
+    for c in candidates:
+        if c.exists():
+            return c
+    return candidates[0]  # caller will detect missing
 
 
 def _load_gaussian_copula(real_df: pd.DataFrame, n: int) -> pd.DataFrame:
@@ -126,6 +135,7 @@ def main() -> int:
         ("fraud_oracle", datasets.load_fraud_oracle),
         ("medical_cost_personal", datasets.load_medical_cost_personal),
         ("fremtpl2_freq", datasets.load_fremtpl2_freq),
+        ("allstate_sev", datasets.load_allstate_sev),
     ]
     rows = []
     for name, loader in runs:
